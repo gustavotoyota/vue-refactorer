@@ -2,6 +2,13 @@ import { existsSync } from "fs";
 import { dirname, extname, isAbsolute, relative, resolve } from "path";
 import type { CliConfig } from "./types";
 
+/**
+ * Normalize path separators to forward slashes for cross-platform compatibility
+ */
+function normalizePath(path: string): string {
+  return path.replace(/\\/g, "/");
+}
+
 export class PathResolver {
   private config: CliConfig;
 
@@ -177,7 +184,9 @@ export class PathResolver {
       return normalizedTo;
     } else if (normalizedOriginal.startsWith(normalizedFrom + "/")) {
       // File is inside the moved directory
-      const relativePath = relative(normalizedFrom, normalizedOriginal);
+      const relativePath = normalizePath(
+        relative(normalizedFrom, normalizedOriginal)
+      );
       return resolve(normalizedTo, relativePath);
     }
 
@@ -218,7 +227,7 @@ export class PathResolver {
     }
 
     // Calculate relative path
-    let relativePath = relative(fromDir, targetPath);
+    let relativePath = normalizePath(relative(fromDir, targetPath));
 
     // Handle file extensions: preserve the original extension behavior
     const originalHasExtension = extname(originalImportPath) !== "";
@@ -261,7 +270,9 @@ export class PathResolver {
     for (const alias of this.config.aliases) {
       const aliasAbsolutePath = resolve(alias.path);
       if (absolutePath.startsWith(aliasAbsolutePath + "/")) {
-        const relativePath = relative(aliasAbsolutePath, absolutePath);
+        const relativePath = normalizePath(
+          relative(aliasAbsolutePath, absolutePath)
+        );
         let aliasPath = alias.alias + "/" + relativePath;
 
         // Preserve original extension behavior
@@ -312,7 +323,9 @@ export class PathResolver {
 
     const aliasAbsolutePath = resolve(aliasConfig.path);
     if (absolutePath.startsWith(aliasAbsolutePath + "/")) {
-      const relativePath = relative(aliasAbsolutePath, absolutePath);
+      const relativePath = normalizePath(
+        relative(aliasAbsolutePath, absolutePath)
+      );
       let aliasPath = preferredAlias + "/" + relativePath;
 
       // Preserve original extension behavior

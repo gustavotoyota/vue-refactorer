@@ -5,6 +5,13 @@ import ignore, { type Ignore } from "ignore";
 import { extname, join, relative, resolve } from "path";
 import type { CliConfig, FileInfo } from "./types";
 
+/**
+ * Normalize path separators to forward slashes for cross-platform compatibility
+ */
+function normalizePath(path: string): string {
+  return path.replace(/\\/g, "/");
+}
+
 export class FileDiscovery {
   private config: CliConfig;
   private ignoreFilter?: Ignore;
@@ -41,7 +48,7 @@ export class FileDiscovery {
         } catch {
           if (this.config.verbose) {
             console.warn(
-              `Warning: Could not read .gitignore at ${gitignorePath}`,
+              `Warning: Could not read .gitignore at ${gitignorePath}`
             );
           }
         }
@@ -77,7 +84,9 @@ export class FileDiscovery {
     // Additional filtering with our custom ignore if needed
     const filteredPaths = this.ignoreFilter
       ? filePaths.filter((path) => {
-          const relativePath = relative(this.config.rootDir, path);
+          const relativePath = normalizePath(
+            relative(this.config.rootDir, path)
+          );
           return !this.ignoreFilter!.ignores(relativePath);
         })
       : filePaths;
@@ -88,7 +97,9 @@ export class FileDiscovery {
 
     const fileInfoPromises = filteredPaths.map(
       async (absolutePath): Promise<FileInfo> => {
-        const relativePath = relative(this.config.rootDir, absolutePath);
+        const relativePath = normalizePath(
+          relative(this.config.rootDir, absolutePath)
+        );
         const extension = extname(absolutePath);
 
         try {
@@ -104,12 +115,12 @@ export class FileDiscovery {
         } catch (error) {
           if (this.config.verbose) {
             console.warn(
-              `Warning: Could not read file ${absolutePath}: ${error}`,
+              `Warning: Could not read file ${absolutePath}: ${error}`
             );
           }
           throw new Error(`Failed to read file: ${absolutePath}`);
         }
-      },
+      }
     );
 
     return Promise.all(fileInfoPromises);
@@ -123,7 +134,7 @@ export class FileDiscovery {
       return false;
     }
 
-    const relativePath = relative(this.config.rootDir, filePath);
+    const relativePath = normalizePath(relative(this.config.rootDir, filePath));
     return this.ignoreFilter.ignores(relativePath);
   }
 
@@ -132,7 +143,9 @@ export class FileDiscovery {
    */
   async findAffectedFiles(movePath: string): Promise<FileInfo[]> {
     const allFiles = await this.findAllFiles();
-    const movePathRelative = relative(this.config.rootDir, movePath);
+    const movePathRelative = normalizePath(
+      relative(this.config.rootDir, movePath)
+    );
 
     if (this.config.verbose) {
       console.log(`Looking for files affected by moving: ${movePathRelative}`);

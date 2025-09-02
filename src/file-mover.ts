@@ -1,11 +1,18 @@
 import { existsSync } from "fs";
 import { mkdir, readdir, rename, rmdir, stat, writeFile } from "fs/promises";
 import { globby } from "globby";
-import { dirname, join, relative, resolve } from "path";
+import { basename, dirname, join, relative, resolve } from "path";
 import { FileDiscovery } from "./file-discovery";
 import { ImportParser } from "./import-parser";
 import { PathResolver } from "./path-resolver";
 import type { CliConfig, FileInfo, ImportInfo, UpdateResult } from "./types";
+
+/**
+ * Normalize path separators to forward slashes for cross-platform compatibility
+ */
+function normalizePath(path: string): string {
+  return path.replace(/\\/g, "/");
+}
 
 export class FileMover {
   private config: CliConfig;
@@ -47,7 +54,7 @@ export class FileMover {
     if (existsSync(destinationPath)) {
       const destStats = await stat(destinationPath);
       if (destStats.isDirectory()) {
-        const sourceFilename = sourcePath.split("/").pop()!;
+        const sourceFilename = basename(sourcePath);
         finalDestinationPath = resolve(destinationPath, sourceFilename);
       }
     }
@@ -59,13 +66,15 @@ export class FileMover {
         (await stat(dirname(destinationPath))).isDirectory() &&
         !destinationPath.includes("."))
     ) {
-      const sourceFilename = sourcePath.split("/").pop()!;
+      const sourceFilename = basename(sourcePath);
       finalDestinationPath = resolve(destinationPath, sourceFilename);
     }
 
     if (this.config.verbose) {
       console.log(
-        `${this.config.dryRun ? "Would move" : "Moving"} ${isSourceDirectory ? "directory" : "file"}:`
+        `${this.config.dryRun ? "Would move" : "Moving"} ${
+          isSourceDirectory ? "directory" : "file"
+        }:`
       );
       console.log(`  From: ${sourcePath}`);
       console.log(`  To: ${finalDestinationPath}`);
@@ -134,7 +143,9 @@ export class FileMover {
           console.log(`  ${status} Line ${imp.line}: ${imp.original.trim()}`);
           if (resolvedPath && this.config.verbose) {
             console.log(
-              `      Resolves to: ${relative(this.config.rootDir, resolvedPath)}`
+              `      Resolves to: ${normalizePath(
+                relative(this.config.rootDir, resolvedPath)
+              )}`
             );
           }
         }
@@ -328,7 +339,9 @@ export class FileMover {
     if (normalizedOriginal === normalizedSource) {
       return normalizedDestination;
     } else if (normalizedOriginal.startsWith(normalizedSource + "/")) {
-      const relativePath = relative(normalizedSource, normalizedOriginal);
+      const relativePath = normalizePath(
+        relative(normalizedSource, normalizedOriginal)
+      );
       return resolve(normalizedDestination, relativePath);
     }
 
@@ -448,7 +461,9 @@ export class FileMover {
     if (this.config.verbose) {
       console.log(`  Globby found ${matchedFiles.length} matches:`);
       matchedFiles.forEach((file) => {
-        console.log(`    ${relative(this.config.rootDir, file)}`);
+        console.log(
+          `    ${normalizePath(relative(this.config.rootDir, file))}`
+        );
       });
     }
 
@@ -516,17 +531,23 @@ export class FileMover {
         if (this.config.verbose) {
           const stats = await stat(matchedPath);
           const itemType = stats.isDirectory() ? "directory" : "file";
-          const sourceRel = relative(this.config.rootDir, matchedPath);
-          const destRel = relative(this.config.rootDir, itemDestinationPath);
+          const sourceRel = normalizePath(
+            relative(this.config.rootDir, matchedPath)
+          );
+          const destRel = normalizePath(
+            relative(this.config.rootDir, itemDestinationPath)
+          );
           console.log(
-            `  ${this.config.dryRun ? "Would move" : "Moved"} ${itemType}: ${sourceRel} → ${destRel}`
+            `  ${
+              this.config.dryRun ? "Would move" : "Moved"
+            } ${itemType}: ${sourceRel} → ${destRel}`
           );
         }
       } catch (error) {
         console.error(
-          `Error moving ${relative(this.config.rootDir, matchedPath)}: ${
-            error instanceof Error ? error.message : String(error)
-          }`
+          `Error moving ${normalizePath(
+            relative(this.config.rootDir, matchedPath)
+          )}: ${error instanceof Error ? error.message : String(error)}`
         );
         // Continue with other items
       }
@@ -558,7 +579,7 @@ export class FileMover {
   ): Promise<string> {
     // For glob patterns, always treat destination as a folder
     // and move each file to that folder with its original filename
-    const filename = matchedPath.split("/").pop()!;
+    const filename = basename(matchedPath);
     return resolve(destinationPath, filename);
   }
 
@@ -648,15 +669,23 @@ export class FileMover {
 
         if (this.config.verbose) {
           const itemType = item.isDirectory() ? "directory" : "file";
-          const sourceRel = relative(this.config.rootDir, itemSourcePath);
-          const destRel = relative(this.config.rootDir, itemDestinationPath);
+          const sourceRel = normalizePath(
+            relative(this.config.rootDir, itemSourcePath)
+          );
+          const destRel = normalizePath(
+            relative(this.config.rootDir, itemDestinationPath)
+          );
           console.log(
-            `  ${this.config.dryRun ? "Would move" : "Moved"} ${itemType}: ${sourceRel} → ${destRel}`
+            `  ${
+              this.config.dryRun ? "Would move" : "Moved"
+            } ${itemType}: ${sourceRel} → ${destRel}`
           );
         }
       } catch (error) {
         console.error(
-          `Error moving ${item.name}: ${error instanceof Error ? error.message : String(error)}`
+          `Error moving ${item.name}: ${
+            error instanceof Error ? error.message : String(error)
+          }`
         );
         // Continue with other items
       }
@@ -685,7 +714,9 @@ export class FileMover {
           await rmdir(sourcePath);
           if (this.config.verbose) {
             console.log(
-              `Removed empty source directory: ${relative(this.config.rootDir, sourcePath)}`
+              `Removed empty source directory: ${normalizePath(
+                relative(this.config.rootDir, sourcePath)
+              )}`
             );
           }
         }
@@ -693,7 +724,9 @@ export class FileMover {
         // Ignore errors when trying to clean up empty directory
         if (this.config.verbose) {
           console.warn(
-            `Warning: Could not remove source directory ${sourcePath}: ${error instanceof Error ? error.message : String(error)}`
+            `Warning: Could not remove source directory ${sourcePath}: ${
+              error instanceof Error ? error.message : String(error)
+            }`
           );
         }
       }
@@ -710,11 +743,15 @@ export class FileMover {
     isDirectory: boolean
   ): void {
     const actionText = this.config.dryRun ? "Would move" : "Moved";
-    const sourceRel = relative(this.config.rootDir, sourcePath);
-    const destRel = relative(this.config.rootDir, destinationPath);
+    const sourceRel = normalizePath(relative(this.config.rootDir, sourcePath));
+    const destRel = normalizePath(
+      relative(this.config.rootDir, destinationPath)
+    );
 
     console.log(
-      `\n${actionText} ${isDirectory ? "directory" : "file"}: ${sourceRel} → ${destRel}`
+      `\n${actionText} ${
+        isDirectory ? "directory" : "file"
+      }: ${sourceRel} → ${destRel}`
     );
 
     if (results.length === 0) {
@@ -725,7 +762,9 @@ export class FileMover {
     console.log(`\nUpdated imports in ${results.length} file(s):`);
 
     for (const result of results) {
-      const relativeFilePath = relative(this.config.rootDir, result.filePath);
+      const relativeFilePath = normalizePath(
+        relative(this.config.rootDir, result.filePath)
+      );
       console.log(
         `\n📝 ${relativeFilePath} (${result.updatedImports} import(s))`
       );
@@ -744,7 +783,9 @@ export class FileMover {
       0
     );
     console.log(
-      `\n✅ ${actionText.toLowerCase()} successfully! Updated ${totalUpdates} import(s) across ${results.length} file(s).`
+      `\n✅ ${actionText.toLowerCase()} successfully! Updated ${totalUpdates} import(s) across ${
+        results.length
+      } file(s).`
     );
   }
 }

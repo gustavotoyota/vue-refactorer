@@ -4,6 +4,13 @@ import { FileMover } from "./file-mover";
 import type { CliConfig, PathAliasConfig } from "./types";
 
 /**
+ * Normalize path separators to forward slashes for cross-platform compatibility
+ */
+function normalizePath(path: string): string {
+  return path.replace(/\\/g, "/");
+}
+
+/**
  * Check if a path contains glob patterns
  */
 function containsGlobPattern(path: string): boolean {
@@ -73,6 +80,9 @@ program
         console.log("  Source arguments:", sourcePaths);
         console.log("  Destination argument:", destination);
         console.log("  Process argv:", process.argv);
+        console.log("  Process cwd:", normalizePath(process.cwd()));
+        console.log("  Options root:", options.root);
+        console.log("  Resolved rootDir:", normalizePath(rootDir));
       }
 
       const destinationPath = resolve(rootDir, destination);
@@ -94,10 +104,13 @@ program
 
       if (config.verbose) {
         console.log("Configuration:");
-        console.log("  Root directory:", config.rootDir);
+        console.log("  Root directory:", normalizePath(config.rootDir));
         console.log("  Sources:", sourcePaths);
-        console.log("  Destination:", destinationPath);
-        console.log("  Aliases:", config.aliases);
+        console.log("  Destination:", normalizePath(destinationPath));
+        console.log(
+          "  Aliases:",
+          config.aliases.map((a) => ({ ...a, path: normalizePath(a.path) }))
+        );
         console.log("  Extensions:", config.fileExtensions);
         console.log("  Respect .gitignore:", config.respectGitignore);
         console.log("  Dry run:", config.dryRun);
@@ -117,8 +130,13 @@ program
 
         if (config.verbose) {
           console.log(
-            `Processing source: ${sourcePath} (glob pattern: ${hasGlobPattern})`
+            `Processing source: ${normalizePath(
+              sourcePath
+            )} (glob pattern: ${hasGlobPattern})`
           );
+          console.log(`  Original source: ${source}`);
+          console.log(`  Root directory: ${normalizePath(rootDir)}`);
+          console.log(`  Resolved source path: ${normalizePath(sourcePath)}`);
         }
 
         await fileMover.move(sourcePath, destinationPath, hasGlobPattern);
