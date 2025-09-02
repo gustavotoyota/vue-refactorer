@@ -1,0 +1,58 @@
+{
+  "name": "vue-refactorer",
+  "version": "1.0.9",
+  "description": "A modern CLI tool for moving files and directories while automatically updating all import references in Vue.js, TypeScript, and JavaScript projects",
+  "keywords": [
+    "vue",
+    "refactor",
+    "move",
+    "imports",
+    "cli",
+    "typescript",
+    "javascript",
+    "files"
+  ],
+  "author": "Gustavo Toyota",
+  "license": "MIT",
+  "homepage": "https://github.com/gustavotoyota/vue-refactorer#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gustavotoyota/vue-refactorer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/gustavotoyota/vue-refactorer/issues"
+  },
+  "bin": {
+    "vue-refactorer": "dist/cli.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest --watch",
+    "prepublishOnly": "bun run build && bun run test",
+    "release": "npm version patch -m \"chore(release): %s\" && git push && git push --tags && bun publish"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "globby": "^14.0.2",
+    "ignore": "^6.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
