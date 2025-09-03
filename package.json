@@ -1,6 +1,6 @@
 {
   "name": "vue-refactorer",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "A modern CLI tool for moving files and directories while automatically updating all import references in Vue.js, TypeScript, and JavaScript projects",
   "keywords": [
     "vue",
