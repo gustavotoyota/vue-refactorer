@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import { resolve } from "path";
 import type { CliConfig } from "./types";
+
+/**
+ * Normalize path separators to forward slashes for cross-platform compatibility
+ */
+function normalizePath(path: string): string {
+  return path.replace(/\\/g, "/");
+}
 
 // Mock fs
 vi.mock("fs", () => ({
@@ -40,8 +48,10 @@ describe("PathResolver", () => {
         // Normalize the path for cross-platform testing
         const normalizedPath = pathStr.replace(/\\/g, "/");
         return (
-          normalizedPath.endsWith("/project/src/utils/helper.ts") ||
-          normalizedPath.endsWith("/project/src/components/Modal.vue")
+          normalizedPath ===
+            normalizePath(resolve("/project/src/utils/helper.ts")) ||
+          normalizedPath ===
+            normalizePath(resolve("/project/src/components/Modal.vue"))
         );
       });
 
@@ -54,8 +64,12 @@ describe("PathResolver", () => {
         "/project/src/components/Button.vue"
       );
 
-      expect(result1).toBe("C:/project/src/utils/helper.ts");
-      expect(result2).toBe("C:/project/src/components/Modal.vue");
+      expect(result1).toBe(
+        normalizePath(resolve("/project/src/utils/helper.ts"))
+      );
+      expect(result2).toBe(
+        normalizePath(resolve("/project/src/components/Modal.vue"))
+      );
     });
 
     test("should resolve alias imports", () => {
@@ -65,8 +79,9 @@ describe("PathResolver", () => {
         // Normalize the path for cross-platform testing
         const normalizedPath = pathStr.replace(/\\/g, "/");
         return (
-          normalizedPath.endsWith("/project/src/utils/helper.ts") ||
-          normalizedPath.endsWith("/project/stores/main.ts")
+          normalizedPath ===
+            normalizePath(resolve("/project/src/utils/helper.ts")) ||
+          normalizedPath === normalizePath(resolve("/project/stores/main.ts"))
         );
       });
 
@@ -79,8 +94,10 @@ describe("PathResolver", () => {
         "/project/src/components/Button.vue"
       );
 
-      expect(result1).toBe("C:/project/src/utils/helper.ts");
-      expect(result2).toBe("C:/project/stores/main.ts");
+      expect(result1).toBe(
+        normalizePath(resolve("/project/src/utils/helper.ts"))
+      );
+      expect(result2).toBe(normalizePath(resolve("/project/stores/main.ts")));
     });
 
     test("should handle imports without extensions", () => {
@@ -89,7 +106,10 @@ describe("PathResolver", () => {
         const pathStr = path.toString();
         // Normalize the path for cross-platform testing
         const normalizedPath = pathStr.replace(/\\/g, "/");
-        return normalizedPath.endsWith("/project/src/utils/helper.ts"); // .ts file exists
+        return (
+          normalizedPath ===
+          normalizePath(resolve("/project/src/utils/helper.ts"))
+        ); // .ts file exists
       });
 
       const result = resolver.resolveImportPath(
@@ -97,7 +117,9 @@ describe("PathResolver", () => {
         "/project/src/utils/index.ts"
       );
 
-      expect(result).toBe("C:/project/src/utils/helper.ts");
+      expect(result).toBe(
+        normalizePath(resolve("/project/src/utils/helper.ts"))
+      );
     });
 
     test("should handle index file imports", () => {
@@ -106,7 +128,10 @@ describe("PathResolver", () => {
         const pathStr = path.toString();
         // Normalize the path for cross-platform testing
         const normalizedPath = pathStr.replace(/\\/g, "/");
-        return normalizedPath.endsWith("/project/src/utils/index.ts");
+        return (
+          normalizedPath ===
+          normalizePath(resolve("/project/src/utils/index.ts"))
+        );
       });
 
       const result = resolver.resolveImportPath(
@@ -114,7 +139,9 @@ describe("PathResolver", () => {
         "/project/src/index.ts"
       );
 
-      expect(result).toBe("C:/project/src/utils/index.ts");
+      expect(result).toBe(
+        normalizePath(resolve("/project/src/utils/index.ts"))
+      );
     });
   });
 
