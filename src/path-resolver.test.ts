@@ -8,7 +8,7 @@ vi.mock("fs", () => ({
 
 // Import PathResolver after mocking
 import { PathResolver } from "./path-resolver";
-import { existsSync } from "fs";
+import { existsSync, PathLike } from "fs";
 
 describe("PathResolver", () => {
   let resolver: PathResolver;
@@ -35,13 +35,13 @@ describe("PathResolver", () => {
   describe("resolveImportPath", () => {
     test("should resolve relative imports", () => {
       // Mock existsSync to return true for our test paths
-      vi.mocked(existsSync).mockImplementation((path: string) => {
+      vi.mocked(existsSync).mockImplementation((path: PathLike) => {
         const pathStr = path.toString();
         // Normalize the path for cross-platform testing
         const normalizedPath = pathStr.replace(/\\/g, "/");
         return (
-          normalizedPath === "/project/src/utils/helper.ts" ||
-          normalizedPath === "/project/src/components/Modal.vue"
+          normalizedPath.endsWith("/project/src/utils/helper.ts") ||
+          normalizedPath.endsWith("/project/src/components/Modal.vue")
         );
       });
 
@@ -54,19 +54,19 @@ describe("PathResolver", () => {
         "/project/src/components/Button.vue"
       );
 
-      expect(result1).toBe("/project/src/utils/helper.ts");
-      expect(result2).toBe("/project/src/components/Modal.vue");
+      expect(result1).toBe("C:/project/src/utils/helper.ts");
+      expect(result2).toBe("C:/project/src/components/Modal.vue");
     });
 
     test("should resolve alias imports", () => {
       // Mock existsSync
-      vi.mocked(existsSync).mockImplementation((path: string) => {
+      vi.mocked(existsSync).mockImplementation((path: PathLike) => {
         const pathStr = path.toString();
         // Normalize the path for cross-platform testing
         const normalizedPath = pathStr.replace(/\\/g, "/");
         return (
-          normalizedPath === "/project/src/utils/helper.ts" ||
-          normalizedPath === "/project/stores/main.ts"
+          normalizedPath.endsWith("/project/src/utils/helper.ts") ||
+          normalizedPath.endsWith("/project/stores/main.ts")
         );
       });
 
@@ -79,17 +79,17 @@ describe("PathResolver", () => {
         "/project/src/components/Button.vue"
       );
 
-      expect(result1).toBe("/project/src/utils/helper.ts");
-      expect(result2).toBe("/project/stores/main.ts");
+      expect(result1).toBe("C:/project/src/utils/helper.ts");
+      expect(result2).toBe("C:/project/stores/main.ts");
     });
 
     test("should handle imports without extensions", () => {
       // Mock existsSync to simulate file discovery
-      vi.mocked(existsSync).mockImplementation((path: string) => {
+      vi.mocked(existsSync).mockImplementation((path: PathLike) => {
         const pathStr = path.toString();
         // Normalize the path for cross-platform testing
         const normalizedPath = pathStr.replace(/\\/g, "/");
-        return normalizedPath === "/project/src/utils/helper.ts"; // .ts file exists
+        return normalizedPath.endsWith("/project/src/utils/helper.ts"); // .ts file exists
       });
 
       const result = resolver.resolveImportPath(
@@ -97,16 +97,16 @@ describe("PathResolver", () => {
         "/project/src/utils/index.ts"
       );
 
-      expect(result).toBe("/project/src/utils/helper.ts");
+      expect(result).toBe("C:/project/src/utils/helper.ts");
     });
 
     test("should handle index file imports", () => {
       // Mock existsSync to simulate index file
-      vi.mocked(existsSync).mockImplementation((path: string) => {
+      vi.mocked(existsSync).mockImplementation((path: PathLike) => {
         const pathStr = path.toString();
         // Normalize the path for cross-platform testing
         const normalizedPath = pathStr.replace(/\\/g, "/");
-        return normalizedPath === "/project/src/utils/index.ts";
+        return normalizedPath.endsWith("/project/src/utils/index.ts");
       });
 
       const result = resolver.resolveImportPath(
@@ -114,7 +114,7 @@ describe("PathResolver", () => {
         "/project/src/index.ts"
       );
 
-      expect(result).toBe("/project/src/utils/index.ts");
+      expect(result).toBe("C:/project/src/utils/index.ts");
     });
   });
 

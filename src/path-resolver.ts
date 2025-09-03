@@ -22,18 +22,18 @@ export class PathResolver {
   resolveImportPath(importPath: string, fromFile: string): string | null {
     // Handle absolute imports (should be rare in relative projects)
     if (isAbsolute(importPath)) {
-      return importPath;
+      return normalizePath(importPath);
     }
 
     // Handle alias imports (@ and ~)
     const aliasResolved = this.resolveAliasPath(importPath);
     if (aliasResolved) {
-      return this.findActualFile(aliasResolved);
+      return this.findActualFile(normalizePath(aliasResolved));
     }
 
     // Handle relative imports
     const fromDir = dirname(fromFile);
-    const resolvedPath = resolve(fromDir, importPath);
+    const resolvedPath = normalizePath(resolve(fromDir, importPath));
     return this.findActualFile(resolvedPath);
   }
 
@@ -44,9 +44,9 @@ export class PathResolver {
     for (const alias of this.config.aliases) {
       if (importPath.startsWith(alias.alias + "/")) {
         const relativePath = importPath.substring(alias.alias.length + 1);
-        return resolve(alias.path, relativePath);
+        return normalizePath(resolve(alias.path, relativePath));
       } else if (importPath === alias.alias) {
-        return alias.path;
+        return normalizePath(alias.path);
       }
     }
     return null;
@@ -56,17 +56,20 @@ export class PathResolver {
    * Find the actual file path, trying different extensions if needed
    */
   private findActualFile(basePath: string): string | null {
+    // Normalize the base path for cross-platform compatibility
+    const normalizedBasePath = normalizePath(basePath);
+
     // First, try the exact path
-    if (existsSync(basePath)) {
-      return basePath;
+    if (existsSync(normalizedBasePath)) {
+      return normalizedBasePath;
     }
 
     // If no extension, try adding common extensions
-    if (!extname(basePath)) {
+    if (!extname(normalizedBasePath)) {
       const extensionsToTry = [".ts", ".tsx", ".js", ".jsx", ".vue"];
 
       for (const ext of extensionsToTry) {
-        const pathWithExt = basePath + ext;
+        const pathWithExt = normalizedBasePath + ext;
         if (existsSync(pathWithExt)) {
           return pathWithExt;
         }
@@ -81,7 +84,7 @@ export class PathResolver {
         "/index.vue",
       ];
       for (const indexExt of indexExtensions) {
-        const indexPath = basePath + indexExt;
+        const indexPath = normalizedBasePath + indexExt;
         if (existsSync(indexPath)) {
           return indexPath;
         }
@@ -156,9 +159,9 @@ export class PathResolver {
     movedFromPath: string,
     _movedToPath: string
   ): boolean {
-    // Normalize paths
-    const normalizedTarget = resolve(targetPath);
-    const normalizedFrom = resolve(movedFromPath);
+    // Normalize paths for cross-platform compatibility
+    const normalizedTarget = normalizePath(resolve(targetPath));
+    const normalizedFrom = normalizePath(resolve(movedFromPath));
 
     // Check if the target path is exactly the moved path or is inside the moved directory
     return (
@@ -175,9 +178,9 @@ export class PathResolver {
     movedFromPath: string,
     movedToPath: string
   ): string {
-    const normalizedOriginal = resolve(originalPath);
-    const normalizedFrom = resolve(movedFromPath);
-    const normalizedTo = resolve(movedToPath);
+    const normalizedOriginal = normalizePath(resolve(originalPath));
+    const normalizedFrom = normalizePath(resolve(movedFromPath));
+    const normalizedTo = normalizePath(resolve(movedToPath));
 
     if (normalizedOriginal === normalizedFrom) {
       // Exact match - the file itself was moved
@@ -187,7 +190,7 @@ export class PathResolver {
       const relativePath = normalizePath(
         relative(normalizedFrom, normalizedOriginal)
       );
-      return resolve(normalizedTo, relativePath);
+      return normalizePath(resolve(normalizedTo, relativePath));
     }
 
     return normalizedOriginal;
@@ -268,10 +271,12 @@ export class PathResolver {
     originalImportPath?: string
   ): string | null {
     for (const alias of this.config.aliases) {
-      const aliasAbsolutePath = resolve(alias.path);
-      if (absolutePath.startsWith(aliasAbsolutePath + "/")) {
+      const aliasAbsolutePath = normalizePath(resolve(alias.path));
+      const normalizedAbsolutePath = normalizePath(absolutePath);
+
+      if (normalizedAbsolutePath.startsWith(aliasAbsolutePath + "/")) {
         const relativePath = normalizePath(
-          relative(aliasAbsolutePath, absolutePath)
+          relative(aliasAbsolutePath, normalizedAbsolutePath)
         );
         let aliasPath = alias.alias + "/" + relativePath;
 
@@ -284,7 +289,7 @@ export class PathResolver {
         }
 
         return aliasPath;
-      } else if (absolutePath === aliasAbsolutePath) {
+      } else if (normalizedAbsolutePath === aliasAbsolutePath) {
         return alias.alias;
       }
     }
@@ -321,10 +326,12 @@ export class PathResolver {
       return null;
     }
 
-    const aliasAbsolutePath = resolve(aliasConfig.path);
-    if (absolutePath.startsWith(aliasAbsolutePath + "/")) {
+    const aliasAbsolutePath = normalizePath(resolve(aliasConfig.path));
+    const normalizedAbsolutePath = normalizePath(absolutePath);
+
+    if (normalizedAbsolutePath.startsWith(aliasAbsolutePath + "/")) {
       const relativePath = normalizePath(
-        relative(aliasAbsolutePath, absolutePath)
+        relative(aliasAbsolutePath, normalizedAbsolutePath)
       );
       let aliasPath = preferredAlias + "/" + relativePath;
 
@@ -337,7 +344,7 @@ export class PathResolver {
       }
 
       return aliasPath;
-    } else if (absolutePath === aliasAbsolutePath) {
+    } else if (normalizedAbsolutePath === aliasAbsolutePath) {
       return preferredAlias;
     }
 
