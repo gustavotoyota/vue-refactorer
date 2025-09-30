@@ -32,11 +32,13 @@ bun install -g vue-refactorer
 
 ## Usage
 
-The basic command structure is to specify a source and a destination.
+The basic command structure is to specify one or more sources and a destination.
 
 ```bash
-vue-refactorer move <source> <destination> [options]
+vue-refactorer move <source...> <destination> [options]
 ```
+
+Path aliases (like `@` or `~`) are automatically detected from your `tsconfig.json` or `jsconfig.json` files.
 
 ### Examples
 
@@ -44,6 +46,12 @@ vue-refactorer move <source> <destination> [options]
 
   ```bash
   npx vue-refactorer move src/components/Button.vue src/shared/Button.vue
+  ```
+
+- **Move multiple files at once:**
+
+  ```bash
+  npx vue-refactorer move src/components/Button.vue src/components/Input.vue src/shared/
   ```
 
 - **Move an entire directory:**
@@ -82,12 +90,33 @@ vue-refactorer move <source> <destination> [options]
 
 You can add these flags to the `move` command.
 
-| Option                 | Alias | Description                                               |
-| :--------------------- | :---- | :-------------------------------------------------------- |
-| `--dry-run`            | `-d`  | Show what would be moved without actually making changes. |
-| `--root <path>`        | `-r`  | Specify the project's root directory to scan from.        |
-| `--alias <alias:path>` | `-a`  | Define a custom path alias (e.g., `@:src`).               |
-| `--verbose`            | `-v`  | Enable detailed logging output for debugging.             |
+| Option               | Alias | Description                                                                 |
+| :------------------- | :---- | :-------------------------------------------------------------------------- |
+| `--dry-run`          | `-d`  | Show what would be moved without actually making changes.                   |
+| `--root <path>`      | `-r`  | Specify the project's root directory (auto-detected if not provided).       |
+| `--extensions <ext>` | `-e`  | File extensions to process, comma-separated (default: `.vue,.ts,.tsx,.js`). |
+| `--no-gitignore`     |       | Do not respect `.gitignore` files when scanning.                            |
+| `--verbose`          | `-v`  | Enable detailed logging output for debugging.                               |
+
+**Note:** Path aliases are automatically detected from your `tsconfig.json` or `jsconfig.json` files.
+
+---
+
+## Scan Command
+
+You can use the `scan` command to preview all files and their imports without making any changes:
+
+```bash
+npx vue-refactorer scan [options]
+```
+
+This is useful for:
+
+- Understanding the structure of your project
+- Verifying that imports are being detected correctly
+- Debugging import resolution issues
+
+The scan command supports the same options as the move command (`--root`, `--extensions`, `--no-gitignore`, `--verbose`).
 
 ---
 

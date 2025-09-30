@@ -12,7 +12,8 @@ Vue Refactorer is a modern CLI tool for moving files and directories in Vue.js, 
 
    - Built with Commander.js for command-line argument parsing
    - Supports two main commands: `move` and `scan`
-   - Handles glob patterns, path aliases, and various options
+   - Handles glob patterns, multiple sources, and various options
+   - Auto-detects project root by looking for common markers (package.json, tsconfig.json, .git, etc.)
 
 2. **File Discovery** (`src/file-discovery.ts`)
 
@@ -31,14 +32,21 @@ Vue Refactorer is a modern CLI tool for moving files and directories in Vue.js, 
 4. **Path Resolver** (`src/path-resolver.ts`)
 
    - Resolves import paths to absolute paths
-   - Handles path aliases (e.g., `@`, `~`)
+   - Handles path aliases using tsconfig/jsconfig paths
    - Calculates new import paths after file moves
    - Maintains extension behavior and alias preferences
 
-5. **File Mover** (`src/file-mover.ts`)
+5. **TypeScript Config Resolver** (`src/tsconfig-resolver.ts`)
+
+   - Auto-detects and parses tsconfig.json/jsconfig.json
+   - Extracts path aliases from the compilerOptions.paths field
+   - Handles extends configurations
+   - Provides path alias mappings to other components
+
+6. **File Mover** (`src/file-mover.ts`)
    - Orchestrates the entire move operation
    - Handles both single files and directories
-   - Supports glob patterns for bulk operations
+   - Supports glob patterns and multiple sources for bulk operations
    - Manages directory merging and conflict resolution
 
 ## Technology Stack
@@ -82,6 +90,7 @@ Vue Refactorer is a modern CLI tool for moving files and directories in Vue.js, 
 ### Move Operations
 
 - Single file moves
+- Multiple source moves (`vue-refactorer move file1.vue file2.vue destination/`)
 - Directory moves (with content merging)
 - Glob pattern moves (`src/*.vue`, `components/**/*.ts`)
 - Directory content moves (`src/components/*`)
@@ -91,22 +100,27 @@ Vue Refactorer is a modern CLI tool for moving files and directories in Vue.js, 
 ### Default Settings
 
 ```typescript
-const DEFAULT_ALIASES: PathAliasConfig[] = [
-  { alias: "@", path: "." },
-  { alias: "~", path: "." },
-];
-
 const DEFAULT_EXTENSIONS = [".vue", ".ts", ".tsx", ".js"];
 ```
 
+Path aliases are automatically detected from your project's `tsconfig.json` or `jsconfig.json` files. The tool reads the `compilerOptions.paths` field and uses those mappings for path resolution.
+
 ### CLI Options
 
-- `--root <path>`: Project root directory
-- `--alias <alias:path>`: Custom path aliases
-- `--extensions <extensions>`: File extensions to process
+#### Move Command
+
+- `--root <path>` / `-r <path>`: Project root directory (auto-detected if not provided)
+- `--extensions <extensions>` / `-e <extensions>`: File extensions to process (comma-separated)
 - `--no-gitignore`: Disable .gitignore respect
-- `--dry-run`: Preview changes without executing
-- `--verbose`: Detailed logging output
+- `--dry-run` / `-d`: Preview changes without executing
+- `--verbose` / `-v`: Detailed logging output
+
+#### Scan Command
+
+- `--root <path>` / `-r <path>`: Project root directory (auto-detected if not provided)
+- `--extensions <extensions>` / `-e <extensions>`: File extensions to process (comma-separated)
+- `--no-gitignore`: Disable .gitignore respect
+- `--verbose` / `-v`: Detailed logging output
 
 ## Development Workflow
 
@@ -187,8 +201,15 @@ const DEFAULT_EXTENSIONS = [".vue", ".ts", ".tsx", ".js"];
 ### Extending Path Resolution
 
 1. Modify `PathResolver` methods
-2. Update alias handling logic
+2. Update `TsConfigResolver` for alias detection logic
 3. Add tests for edge cases
+
+### Working with TypeScript Config
+
+1. `TsConfigResolver` handles auto-detection of tsconfig.json/jsconfig.json
+2. Parses `compilerOptions.paths` for path aliases
+3. Supports `extends` configurations
+4. Path aliases are relative to the `baseUrl` or config file location
 
 ## Testing Guidelines
 
