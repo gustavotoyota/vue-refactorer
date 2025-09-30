@@ -45,8 +45,6 @@ export interface PathAliasConfig {
 export interface CliConfig {
   /** Root directory to scan from */
   rootDir: string;
-  /** Path aliases configuration */
-  aliases: PathAliasConfig[];
   /** File extensions to process */
   fileExtensions: string[];
   /** Whether to respect .gitignore */

@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { FileMover } from "./file-mover";
+import { TsConfigResolver } from "./tsconfig-resolver";
 import type { CliConfig } from "./types";
+import type { TsConfigInfo } from "./tsconfig-resolver";
 
 // Mock dependencies
 vi.mock("fs/promises", () => ({
@@ -12,6 +14,7 @@ vi.mock("fs/promises", () => ({
 }));
 vi.mock("fs", () => ({
   existsSync: vi.fn(),
+  readFileSync: vi.fn(),
 }));
 vi.mock("globby", () => ({
   globby: vi.fn(),
@@ -20,20 +23,39 @@ vi.mock("globby", () => ({
 describe("FileMover", () => {
   let fileMover: FileMover;
   let config: CliConfig;
+  let mockTsConfigResolver: TsConfigResolver;
 
   beforeEach(() => {
     config = {
       rootDir: "/project",
-      aliases: [
-        { alias: "@", path: "/project/src" },
-        { alias: "~", path: "/project" },
-      ],
       fileExtensions: [".vue", ".ts", ".tsx", ".js"],
       respectGitignore: true,
       dryRun: true, // Use dry run for tests
       verbose: false,
     };
-    fileMover = new FileMover(config);
+
+    // Create a mock TsConfigResolver
+    mockTsConfigResolver = new TsConfigResolver("/project", false);
+
+    // Mock the findConfigForFile method to return our test aliases
+    mockTsConfigResolver.findConfigForFile = vi.fn(
+      (_filePath: string): TsConfigInfo | null => {
+        return {
+          configPath: "/project/tsconfig.json",
+          baseUrl: ".",
+          paths: {
+            "@/*": ["./src/*"],
+            "~/*": ["./*"],
+          },
+          aliases: [
+            { alias: "@", path: "/project/src" },
+            { alias: "~", path: "/project" },
+          ],
+        };
+      }
+    );
+
+    fileMover = new FileMover(config, mockTsConfigResolver);
 
     // Clear all mocks
     vi.clearAllMocks();
@@ -201,7 +223,7 @@ import Button from '@/components/Button.vue';
       (existsSync as any).mockReturnValue(true);
 
       // Capture console output
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => { });
 
       await fileMover.scan();
 

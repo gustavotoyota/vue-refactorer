@@ -1,7 +1,9 @@
 import { program } from "commander";
-import { resolve } from "path";
+import { existsSync } from "fs";
+import { resolve, join } from "path";
 import { FileMover } from "./file-mover";
-import type { CliConfig, PathAliasConfig } from "./types";
+import { TsConfigResolver } from "./tsconfig-resolver";
+import type { CliConfig } from "./types";
 
 /**
  * Normalize path separators to forward slashes for cross-platform compatibility
@@ -17,10 +19,48 @@ function containsGlobPattern(path: string): boolean {
   return /[*?[\]{}]/.test(path);
 }
 
-const DEFAULT_ALIASES: PathAliasConfig[] = [
-  { alias: "@", path: "." },
-  { alias: "~", path: "." },
-];
+/**
+ * Detect project root by looking for common markers
+ */
+function detectProjectRoot(providedRoot?: string): string {
+  if (providedRoot) {
+    return resolve(providedRoot);
+  }
+
+  // Start from current working directory
+  let currentDir = process.cwd();
+
+  // Walk up to find project markers
+  const visited = new Set<string>();
+  while (currentDir && !visited.has(currentDir)) {
+    visited.add(currentDir);
+
+    // Check for common project root markers
+    const markers = [
+      "package.json",
+      "tsconfig.json",
+      "jsconfig.json",
+      ".git",
+      "pnpm-workspace.yaml",
+      "lerna.json",
+      "turbo.json",
+    ];
+
+    for (const marker of markers) {
+      if (existsSync(join(currentDir, marker))) {
+        return currentDir;
+      }
+    }
+
+    // Move to parent directory
+    const parentDir = resolve(currentDir, "..");
+    if (parentDir === currentDir) break; // Reached filesystem root
+    currentDir = parentDir;
+  }
+
+  // Fallback to current directory
+  return process.cwd();
+}
 
 const DEFAULT_EXTENSIONS = [".vue", ".ts", ".tsx", ".js"];
 
@@ -34,14 +74,11 @@ program
 program
   .command("move <sources...>")
   .description(
-    "Move files/directories and update import references. Supports multiple source files or glob patterns (e.g., 'src/*.vue', 'components/*', 'utils/**/*.ts'). Last argument is the destination."
+    "Move files/directories and update import references. Supports multiple source files or glob patterns (e.g., 'src/*.vue', 'components/*', 'utils/**/*.ts'). Last argument is the destination. Path aliases are automatically detected from tsconfig.json/jsconfig.json."
   )
-  .option("-r, --root <path>", "Root directory to scan from", process.cwd())
   .option(
-    "-a, --alias <alias:path>",
-    "Path alias mapping (e.g., @:./src)",
-    collectAliases,
-    []
+    "-r, --root <path>",
+    "Root directory (auto-detected if not provided)"
   )
   .option(
     "-e, --extensions <extensions>",
@@ -58,7 +95,7 @@ program
   .option("-v, --verbose", "Enable verbose output")
   .action(async (sources: string[], options, command) => {
     try {
-      const rootDir = resolve(options.root);
+      const rootDir = detectProjectRoot(options.root);
 
       // Validate that we have at least 2 arguments (source + destination)
       if (sources.length < 2) {
@@ -89,13 +126,6 @@ program
 
       const config: CliConfig = {
         rootDir,
-        aliases:
-          options.alias.length > 0
-            ? options.alias
-            : DEFAULT_ALIASES.map((alias) => ({
-                ...alias,
-                path: rootDir,
-              })),
         fileExtensions: options.extensions,
         respectGitignore: options.gitignore !== false,
         dryRun: options.dryRun || false,
@@ -107,17 +137,16 @@ program
         console.log("  Root directory:", normalizePath(config.rootDir));
         console.log("  Sources:", sourcePaths);
         console.log("  Destination:", normalizePath(destinationPath));
-        console.log(
-          "  Aliases:",
-          config.aliases.map((a) => ({ ...a, path: normalizePath(a.path) }))
-        );
         console.log("  Extensions:", config.fileExtensions);
         console.log("  Respect .gitignore:", config.respectGitignore);
         console.log("  Dry run:", config.dryRun);
+        console.log("  Aliases: Auto-detected from tsconfig.json/jsconfig.json");
         console.log();
       }
 
-      const fileMover = new FileMover(config);
+      // Initialize TsConfigResolver
+      const tsConfigResolver = new TsConfigResolver(rootDir, config.verbose);
+      const fileMover = new FileMover(config, tsConfigResolver);
 
       // Handle multiple sources
       for (const source of sourcePaths) {
@@ -152,13 +181,12 @@ program
 
 program
   .command("scan")
-  .description("Scan directory and show all files and their imports")
-  .option("-r, --root <path>", "Root directory to scan from", process.cwd())
+  .description(
+    "Scan directory and show all files and their imports. Path aliases are automatically detected from tsconfig.json/jsconfig.json."
+  )
   .option(
-    "-a, --alias <alias:path>",
-    "Path alias mapping (e.g., @:./src)",
-    collectAliases,
-    []
+    "-r, --root <path>",
+    "Root directory (auto-detected if not provided)"
   )
   .option(
     "-e, --extensions <extensions>",
@@ -171,24 +199,19 @@ program
   .option("-v, --verbose", "Enable verbose output")
   .action(async (options) => {
     try {
-      const rootDir = resolve(options.root);
+      const rootDir = detectProjectRoot(options.root);
 
       const config: CliConfig = {
         rootDir,
-        aliases:
-          options.alias.length > 0
-            ? options.alias
-            : DEFAULT_ALIASES.map((alias) => ({
-                ...alias,
-                path: rootDir,
-              })),
         fileExtensions: options.extensions,
         respectGitignore: options.gitignore !== false,
         dryRun: true, // Always dry run for scan
         verbose: options.verbose || false,
       };
 
-      const fileMover = new FileMover(config);
+      // Initialize TsConfigResolver
+      const tsConfigResolver = new TsConfigResolver(rootDir, config.verbose);
+      const fileMover = new FileMover(config, tsConfigResolver);
       await fileMover.scan();
     } catch (error) {
       console.error(
@@ -198,16 +221,5 @@ program
       process.exit(1);
     }
   });
-
-function collectAliases(
-  value: string,
-  previous: PathAliasConfig[]
-): PathAliasConfig[] {
-  const [alias, path] = value.split(":");
-  if (!alias || !path) {
-    throw new Error(`Invalid alias format: ${value}. Use format "alias:path"`);
-  }
-  return [...previous, { alias, path: resolve(path) }];
-}
 
 program.parse();

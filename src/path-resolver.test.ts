@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { resolve } from "path";
-import type { CliConfig } from "./types";
+import type { CliConfig, PathAliasConfig } from "./types";
+import type { TsConfigInfo } from "./tsconfig-resolver";
 
 /**
  * Normalize path separators to forward slashes for cross-platform compatibility
@@ -12,29 +13,50 @@ function normalizePath(path: string): string {
 // Mock fs
 vi.mock("fs", () => ({
   existsSync: vi.fn(),
+  readFileSync: vi.fn(),
 }));
 
 // Import PathResolver after mocking
 import { PathResolver } from "./path-resolver";
+import { TsConfigResolver } from "./tsconfig-resolver";
 import { existsSync, PathLike } from "fs";
 
 describe("PathResolver", () => {
   let resolver: PathResolver;
   let config: CliConfig;
+  let mockTsConfigResolver: TsConfigResolver;
 
   beforeEach(() => {
     config = {
       rootDir: "/project",
-      aliases: [
-        { alias: "@", path: "/project/src" },
-        { alias: "~", path: "/project" },
-      ],
       fileExtensions: [".vue", ".ts", ".tsx", ".js"],
       respectGitignore: true,
       dryRun: false,
       verbose: false,
     };
-    resolver = new PathResolver(config);
+
+    // Create a mock TsConfigResolver that returns predefined aliases
+    mockTsConfigResolver = new TsConfigResolver("/project", false);
+
+    // Mock the findConfigForFile method to return our test aliases
+    mockTsConfigResolver.findConfigForFile = vi.fn(
+      (_filePath: string): TsConfigInfo | null => {
+        return {
+          configPath: "/project/tsconfig.json",
+          baseUrl: ".",
+          paths: {
+            "@/*": ["./src/*"],
+            "~/*": ["./*"],
+          },
+          aliases: [
+            { alias: "@", path: "/project/src" },
+            { alias: "~", path: "/project" },
+          ],
+        };
+      }
+    );
+
+    resolver = new PathResolver(config, mockTsConfigResolver);
 
     // Reset mock before each test
     vi.mocked(existsSync).mockReset();
@@ -49,9 +71,9 @@ describe("PathResolver", () => {
         const normalizedPath = pathStr.replace(/\\/g, "/");
         return (
           normalizedPath ===
-            normalizePath(resolve("/project/src/utils/helper.ts")) ||
+          normalizePath(resolve("/project/src/utils/helper.ts")) ||
           normalizedPath ===
-            normalizePath(resolve("/project/src/components/Modal.vue"))
+          normalizePath(resolve("/project/src/components/Modal.vue"))
         );
       });
 
@@ -80,7 +102,7 @@ describe("PathResolver", () => {
         const normalizedPath = pathStr.replace(/\\/g, "/");
         return (
           normalizedPath ===
-            normalizePath(resolve("/project/src/utils/helper.ts")) ||
+          normalizePath(resolve("/project/src/utils/helper.ts")) ||
           normalizedPath === normalizePath(resolve("/project/stores/main.ts"))
         );
       });

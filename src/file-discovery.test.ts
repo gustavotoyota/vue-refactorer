@@ -14,10 +14,6 @@ describe("FileDiscovery", () => {
   beforeEach(() => {
     config = {
       rootDir: "/project",
-      aliases: [
-        { alias: "@", path: "/project/src" },
-        { alias: "~", path: "/project" },
-      ],
       fileExtensions: [".vue", ".ts", ".tsx", ".js"],
       respectGitignore: true,
       dryRun: false,

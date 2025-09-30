@@ -1,6 +1,7 @@
 import { existsSync } from "fs";
 import { dirname, extname, isAbsolute, relative, resolve } from "path";
-import type { CliConfig } from "./types";
+import type { CliConfig, PathAliasConfig } from "./types";
+import type { TsConfigResolver } from "./tsconfig-resolver";
 
 /**
  * Normalize path separators to forward slashes for cross-platform compatibility
@@ -11,9 +12,35 @@ function normalizePath(path: string): string {
 
 export class PathResolver {
   private config: CliConfig;
+  private tsConfigResolver: TsConfigResolver;
+  private aliasCache = new Map<string, PathAliasConfig[]>();
 
-  constructor(config: CliConfig) {
+  constructor(config: CliConfig, tsConfigResolver: TsConfigResolver) {
     this.config = config;
+    this.tsConfigResolver = tsConfigResolver;
+  }
+
+  /**
+   * Get aliases for a specific file based on its nearest tsconfig.json
+   */
+  private getAliasesForFile(filePath: string): PathAliasConfig[] {
+    const normalizedPath = normalizePath(resolve(filePath));
+
+    // Check cache
+    if (this.aliasCache.has(normalizedPath)) {
+      return this.aliasCache.get(normalizedPath)!;
+    }
+
+    // Find tsconfig for this file
+    const tsConfig = this.tsConfigResolver.findConfigForFile(normalizedPath);
+
+    // Use aliases from tsconfig, or empty array if no config
+    const aliases = tsConfig?.aliases || [];
+
+    // Cache for this file
+    this.aliasCache.set(normalizedPath, aliases);
+
+    return aliases;
   }
 
   /**
@@ -25,8 +52,8 @@ export class PathResolver {
       return normalizePath(importPath);
     }
 
-    // Handle alias imports (@ and ~)
-    const aliasResolved = this.resolveAliasPath(importPath);
+    // Handle alias imports (@ and ~) - now per-file
+    const aliasResolved = this.resolveAliasPath(importPath, fromFile);
     if (aliasResolved) {
       return this.findActualFile(normalizePath(aliasResolved));
     }
@@ -39,9 +66,13 @@ export class PathResolver {
 
   /**
    * Resolve alias paths like @/components or ~/utils
+   * Now context-aware - uses aliases specific to the file
    */
-  private resolveAliasPath(importPath: string): string | null {
-    for (const alias of this.config.aliases) {
+  private resolveAliasPath(importPath: string, fromFile: string): string | null {
+    // Get aliases specific to this file
+    const aliases = this.getAliasesForFile(fromFile);
+
+    for (const alias of aliases) {
       if (importPath.startsWith(alias.alias + "/")) {
         const relativePath = importPath.substring(alias.alias.length + 1);
         return normalizePath(resolve(alias.path, relativePath));
@@ -198,6 +229,7 @@ export class PathResolver {
 
   /**
    * Calculate the appropriate import path (relative, alias, or absolute)
+   * Now context-aware - uses aliases specific to the file
    */
   private calculateRelativeImportPath(
     targetPath: string,
@@ -207,12 +239,13 @@ export class PathResolver {
     const fromDir = dirname(fromFile);
 
     // If original was an alias import, try to maintain the same alias if possible
-    if (this.isAliasImport(originalImportPath)) {
-      const originalAlias = this.getOriginalAlias(originalImportPath);
+    if (this.isAliasImport(originalImportPath, fromFile)) {
+      const originalAlias = this.getOriginalAlias(originalImportPath, fromFile);
       if (originalAlias) {
         const preferredAliasPath = this.tryConvertToSpecificAliasPath(
           targetPath,
           originalAlias,
+          fromFile,
           originalImportPath
         );
         if (preferredAliasPath) {
@@ -222,6 +255,7 @@ export class PathResolver {
       // Fallback to any alias if the preferred one doesn't work
       const anyAliasPath = this.tryConvertToAliasPath(
         targetPath,
+        fromFile,
         originalImportPath
       );
       if (anyAliasPath) {
@@ -254,23 +288,27 @@ export class PathResolver {
   }
 
   /**
-   * Check if an import path uses an alias
+   * Check if an import path uses an alias (context-aware)
    */
-  private isAliasImport(importPath: string): boolean {
-    return this.config.aliases.some(
+  private isAliasImport(importPath: string, fromFile: string): boolean {
+    const aliases = this.getAliasesForFile(fromFile);
+    return aliases.some(
       (alias) =>
         importPath.startsWith(alias.alias + "/") || importPath === alias.alias
     );
   }
 
   /**
-   * Try to convert an absolute path to an alias path
+   * Try to convert an absolute path to an alias path (context-aware)
    */
   private tryConvertToAliasPath(
     absolutePath: string,
+    fromFile: string,
     originalImportPath?: string
   ): string | null {
-    for (const alias of this.config.aliases) {
+    const aliases = this.getAliasesForFile(fromFile);
+
+    for (const alias of aliases) {
       const aliasAbsolutePath = normalizePath(resolve(alias.path));
       const normalizedAbsolutePath = normalizePath(absolutePath);
 
@@ -297,10 +335,12 @@ export class PathResolver {
   }
 
   /**
-   * Get the original alias used in an import path
+   * Get the original alias used in an import path (context-aware)
    */
-  private getOriginalAlias(importPath: string): string | null {
-    for (const alias of this.config.aliases) {
+  private getOriginalAlias(importPath: string, fromFile: string): string | null {
+    const aliases = this.getAliasesForFile(fromFile);
+
+    for (const alias of aliases) {
       if (
         importPath.startsWith(alias.alias + "/") ||
         importPath === alias.alias
@@ -312,14 +352,16 @@ export class PathResolver {
   }
 
   /**
-   * Try to convert an absolute path to a specific alias path
+   * Try to convert an absolute path to a specific alias path (context-aware)
    */
   private tryConvertToSpecificAliasPath(
     absolutePath: string,
     preferredAlias: string,
+    fromFile: string,
     originalImportPath?: string
   ): string | null {
-    const aliasConfig = this.config.aliases.find(
+    const aliases = this.getAliasesForFile(fromFile);
+    const aliasConfig = aliases.find(
       (alias) => alias.alias === preferredAlias
     );
     if (!aliasConfig) {

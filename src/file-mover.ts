@@ -5,6 +5,7 @@ import { basename, dirname, join, relative, resolve } from "path";
 import { FileDiscovery } from "./file-discovery";
 import { ImportParser } from "./import-parser";
 import { PathResolver } from "./path-resolver";
+import type { TsConfigResolver } from "./tsconfig-resolver";
 import type { CliConfig, FileInfo, ImportInfo, UpdateResult } from "./types";
 
 /**
@@ -20,11 +21,11 @@ export class FileMover {
   private importParser: ImportParser;
   private pathResolver: PathResolver;
 
-  constructor(config: CliConfig) {
+  constructor(config: CliConfig, tsConfigResolver: TsConfigResolver) {
     this.config = config;
     this.fileDiscovery = new FileDiscovery(config);
     this.importParser = new ImportParser();
-    this.pathResolver = new PathResolver(config);
+    this.pathResolver = new PathResolver(config, tsConfigResolver);
   }
 
   /**
@@ -72,8 +73,7 @@ export class FileMover {
 
     if (this.config.verbose) {
       console.log(
-        `${this.config.dryRun ? "Would move" : "Moving"} ${
-          isSourceDirectory ? "directory" : "file"
+        `${this.config.dryRun ? "Would move" : "Moving"} ${isSourceDirectory ? "directory" : "file"
         }:`
       );
       console.log(`  From: ${sourcePath}`);
@@ -538,8 +538,7 @@ export class FileMover {
             relative(this.config.rootDir, itemDestinationPath)
           );
           console.log(
-            `  ${
-              this.config.dryRun ? "Would move" : "Moved"
+            `  ${this.config.dryRun ? "Would move" : "Moved"
             } ${itemType}: ${sourceRel} → ${destRel}`
           );
         }
@@ -599,8 +598,7 @@ export class FileMover {
     );
 
     console.log(
-      `\n${actionText} ${
-        isDirectory ? "directory" : "file"
+      `\n${actionText} ${isDirectory ? "directory" : "file"
       }: ${sourceRel} → ${destRel}`
     );
 
@@ -633,8 +631,7 @@ export class FileMover {
       0
     );
     console.log(
-      `\n✅ ${actionText.toLowerCase()} successfully! Updated ${totalUpdates} import(s) across ${
-        results.length
+      `\n✅ ${actionText.toLowerCase()} successfully! Updated ${totalUpdates} import(s) across ${results.length
       } file(s).`
     );
   }
