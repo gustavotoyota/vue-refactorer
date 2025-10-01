@@ -107,8 +107,22 @@ export class TsConfigResolver {
 
   /**
    * Parse a TypeScript/JavaScript config file using get-tsconfig
+   * Accepts either a file path string or a TsConfigResult object
    */
-  private parseConfig(result: TsConfigResult): TsConfigInfo {
+  parseConfig(pathOrResult: string | TsConfigResult): TsConfigInfo {
+    let result: TsConfigResult;
+
+    if (typeof pathOrResult === 'string') {
+      // Legacy support: parse from file path
+      const config = parseTsconfig(pathOrResult);
+      result = {
+        path: normalizePath(resolve(pathOrResult)),
+        config,
+      };
+    } else {
+      result = pathOrResult;
+    }
+
     const configPath = normalizePath(result.path);
 
     if (this.verbose) {
