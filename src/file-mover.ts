@@ -208,6 +208,19 @@ export class FileMover {
       }
       console.log();
     }
+
+    // Show alias information for debugging
+    console.log("\n--- Debug Info ---");
+    const aliases = this.pathResolver.getAliasesForFile(absolutePath);
+    if (aliases && aliases.length > 0) {
+      console.log(`\nPath aliases detected for this file:`);
+      for (const alias of aliases) {
+        console.log(`  ${alias.alias} -> ${alias.path}`);
+      }
+    } else {
+      console.log(`\nNo path aliases detected for this file.`);
+      console.log(`This might be because no tsconfig.json or jsconfig.json was found.`);
+    }
   }
 
   /**

@@ -23,7 +23,7 @@ export class PathResolver {
   /**
    * Get aliases for a specific file based on its nearest tsconfig.json
    */
-  private getAliasesForFile(filePath: string): PathAliasConfig[] {
+  public getAliasesForFile(filePath: string): PathAliasConfig[] {
     const normalizedPath = normalizePath(resolve(filePath));
 
     // Check cache
