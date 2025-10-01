@@ -172,7 +172,7 @@ export class TsConfigResolver {
     const paths = compilerOptions.paths || {};
 
     // Convert paths to aliases
-    const aliases = this.convertPathsToAliases(
+    let aliases = this.convertPathsToAliases(
       paths,
       baseUrl,
       dirname(normalizedConfigPath)
@@ -183,6 +183,15 @@ export class TsConfigResolver {
       (ref: any) => ref.path
     );
 
+    // If we have references but no aliases, try to collect aliases from referenced configs
+    // This is common in Nuxt and other frameworks that use project references
+    if (references.length > 0 && aliases.length === 0) {
+      if (this.verbose) {
+        console.log(`  No aliases in main config, checking ${references.length} referenced config(s)`);
+      }
+      aliases = this.collectAliasesFromReferences(references, normalizedConfigPath);
+    }
+
     return {
       configPath: normalizedConfigPath,
       baseUrl,
@@ -191,6 +200,72 @@ export class TsConfigResolver {
       extends: config.extends,
       references: references.length > 0 ? references : undefined,
     };
+  }
+
+  /**
+   * Collect path aliases from referenced tsconfig files (for project references)
+   */
+  private collectAliasesFromReferences(
+    references: string[],
+    baseConfigPath: string
+  ): PathAliasConfig[] {
+    const allAliases: PathAliasConfig[] = [];
+    const seenAliases = new Set<string>();
+
+    for (const refPath of references) {
+      const resolvedRefPath = this.resolveConfigPath(
+        refPath,
+        dirname(baseConfigPath)
+      );
+
+      if (!resolvedRefPath) {
+        if (this.verbose) {
+          console.log(`    Referenced config not found: ${refPath}`);
+        }
+        continue;
+      }
+
+      try {
+        if (this.verbose) {
+          console.log(`    Checking referenced config: ${resolvedRefPath}`);
+        }
+
+        const refContent = readFileSync(resolvedRefPath, "utf-8");
+        const strippedRefContent = this.stripJsonComments(refContent);
+        const refConfig = JSON.parse(strippedRefContent);
+
+        const refCompilerOptions = refConfig.compilerOptions || {};
+        const refBaseUrl = refCompilerOptions.baseUrl || ".";
+        const refPaths = refCompilerOptions.paths || {};
+
+        if (Object.keys(refPaths).length > 0) {
+          if (this.verbose) {
+            console.log(`      Found ${Object.keys(refPaths).length} path alias(es)`);
+          }
+
+          const refAliases = this.convertPathsToAliases(
+            refPaths,
+            refBaseUrl,
+            dirname(resolvedRefPath)
+          );
+
+          // Merge aliases, avoiding duplicates (first occurrence wins)
+          for (const alias of refAliases) {
+            if (!seenAliases.has(alias.alias)) {
+              seenAliases.add(alias.alias);
+              allAliases.push(alias);
+            }
+          }
+        }
+      } catch (error) {
+        if (this.verbose) {
+          console.log(`    Failed to parse referenced config ${resolvedRefPath}: ${error}`);
+        }
+      }
+    }
+
+    // Sort by specificity (longer aliases first)
+    return allAliases.sort((a, b) => b.alias.length - a.alias.length);
   }
 
   /**
