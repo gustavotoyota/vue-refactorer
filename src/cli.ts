@@ -214,7 +214,7 @@ program
         fileExtensions: options.extensions,
         respectGitignore: options.gitignore !== false,
         dryRun: true, // Always dry run for scan
-        verbose: options.verbose || false,
+        verbose: options.file ? true : (options.verbose || false), // Always verbose when scanning single file
       };
 
       // Initialize TsConfigResolver
@@ -222,7 +222,7 @@ program
       const fileMover = new FileMover(config, tsConfigResolver);
 
       if (options.file) {
-        // Scan a specific file
+        // Scan a specific file (always verbose for detailed debugging)
         const targetFile = resolve(process.cwd(), options.file);
         await fileMover.scanFile(targetFile);
       } else {

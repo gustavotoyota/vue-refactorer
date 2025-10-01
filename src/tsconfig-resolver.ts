@@ -87,29 +87,46 @@ export class TsConfigResolver {
     let currentDir = dirname(filePath);
     const visited = new Set<string>();
 
+    if (this.verbose) {
+      console.log(`\nSearching for tsconfig.json starting from: ${currentDir}`);
+    }
+
     while (currentDir && !visited.has(currentDir)) {
       visited.add(currentDir);
 
       // Check for tsconfig.json first
       const tsconfigPath = join(currentDir, "tsconfig.json");
+      if (this.verbose) {
+        console.log(`  Checking: ${tsconfigPath} - ${existsSync(tsconfigPath) ? "Found!" : "Not found"}`);
+      }
       if (existsSync(tsconfigPath)) {
         return normalizePath(tsconfigPath);
       }
 
       // Check for jsconfig.json as fallback
       const jsconfigPath = join(currentDir, "jsconfig.json");
+      if (this.verbose) {
+        console.log(`  Checking: ${jsconfigPath} - ${existsSync(jsconfigPath) ? "Found!" : "Not found"}`);
+      }
       if (existsSync(jsconfigPath)) {
         return normalizePath(jsconfigPath);
       }
 
       // Stop at git root or filesystem root
       if (existsSync(join(currentDir, ".git"))) {
+        if (this.verbose) {
+          console.log(`  Found .git directory at ${currentDir}, stopping search`);
+        }
         break;
       }
 
       const parentDir = resolve(currentDir, "..");
       if (parentDir === currentDir) break; // Reached filesystem root
       currentDir = parentDir;
+    }
+
+    if (this.verbose) {
+      console.log(`  No tsconfig.json or jsconfig.json found`);
     }
 
     return null;
