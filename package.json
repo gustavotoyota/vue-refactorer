@@ -43,6 +43,7 @@
   },
   "dependencies": {
     "commander": "^12.1.0",
+    "get-tsconfig": "^4.10.1",
     "globby": "^14.0.2",
     "ignore": "^6.0.2"
   },

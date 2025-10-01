@@ -1,5 +1,6 @@
-import { existsSync, readFileSync } from "fs";
+import { existsSync } from "fs";
 import { dirname, resolve, join } from "path";
+import { getTsconfig, parseTsconfig, type TsConfigResult } from "get-tsconfig";
 import type { PathAliasConfig } from "./types";
 
 /**
@@ -54,18 +55,42 @@ export class TsConfigResolver {
       return this.configCache.get(configPath) || null;
     }
 
-    // Walk up directory tree to find config
-    const configPath = this.walkUpToFindConfig(normalizedFilePath);
+    // Use get-tsconfig to find the nearest tsconfig
+    if (this.verbose) {
+      console.log(`\nSearching for tsconfig.json starting from: ${dirname(normalizedFilePath)}`);
+    }
+
+    // Try tsconfig.json first
+    let result = getTsconfig(dirname(normalizedFilePath), "tsconfig.json");
+
+    // Fall back to jsconfig.json if tsconfig.json not found
+    if (!result) {
+      if (this.verbose) {
+        console.log(`  No tsconfig.json found, trying jsconfig.json...`);
+      }
+      result = getTsconfig(dirname(normalizedFilePath), "jsconfig.json");
+    }
+
+    if (!result) {
+      if (this.verbose) {
+        console.log(`  No tsconfig.json or jsconfig.json found`);
+      }
+      this.fileToConfigCache.set(normalizedFilePath, null);
+      return null;
+    }
+
+    const configPath = normalizePath(result.path);
+    if (this.verbose) {
+      console.log(`  Found config: ${configPath}`);
+    }
 
     // Cache the file-to-config mapping
     this.fileToConfigCache.set(normalizedFilePath, configPath);
 
-    if (!configPath) return null;
-
     // Check config cache
     if (!this.configCache.has(configPath)) {
       try {
-        this.configCache.set(configPath, this.parseConfig(configPath));
+        this.configCache.set(configPath, this.parseConfig(result));
       } catch (error) {
         if (this.verbose) {
           console.warn(
@@ -81,93 +106,20 @@ export class TsConfigResolver {
   }
 
   /**
-   * Walk up the directory tree to find tsconfig.json or jsconfig.json
+   * Parse a TypeScript/JavaScript config file using get-tsconfig
    */
-  private walkUpToFindConfig(filePath: string): string | null {
-    let currentDir = dirname(filePath);
-    const visited = new Set<string>();
+  private parseConfig(result: TsConfigResult): TsConfigInfo {
+    const configPath = normalizePath(result.path);
 
     if (this.verbose) {
-      console.log(`\nSearching for tsconfig.json starting from: ${currentDir}`);
+      console.log(`Parsing config: ${configPath}`);
     }
 
-    while (currentDir && !visited.has(currentDir)) {
-      visited.add(currentDir);
-
-      // Check for tsconfig.json first
-      const tsconfigPath = join(currentDir, "tsconfig.json");
-      if (this.verbose) {
-        console.log(`  Checking: ${tsconfigPath} - ${existsSync(tsconfigPath) ? "Found!" : "Not found"}`);
-      }
-      if (existsSync(tsconfigPath)) {
-        return normalizePath(tsconfigPath);
-      }
-
-      // Check for jsconfig.json as fallback
-      const jsconfigPath = join(currentDir, "jsconfig.json");
-      if (this.verbose) {
-        console.log(`  Checking: ${jsconfigPath} - ${existsSync(jsconfigPath) ? "Found!" : "Not found"}`);
-      }
-      if (existsSync(jsconfigPath)) {
-        return normalizePath(jsconfigPath);
-      }
-
-      // Stop at git root or filesystem root
-      if (existsSync(join(currentDir, ".git"))) {
-        if (this.verbose) {
-          console.log(`  Found .git directory at ${currentDir}, stopping search`);
-        }
-        break;
-      }
-
-      const parentDir = resolve(currentDir, "..");
-      if (parentDir === currentDir) break; // Reached filesystem root
-      currentDir = parentDir;
-    }
-
-    if (this.verbose) {
-      console.log(`  No tsconfig.json or jsconfig.json found`);
-    }
-
-    return null;
-  }
-
-  /**
-   * Parse a TypeScript/JavaScript config file
-   */
-  parseConfig(configPath: string): TsConfigInfo {
-    const normalizedConfigPath = normalizePath(resolve(configPath));
-
-    if (this.verbose) {
-      console.log(`Parsing config: ${normalizedConfigPath}`);
-    }
-
-    const content = readFileSync(normalizedConfigPath, "utf-8");
-    const strippedContent = this.stripJsonComments(content);
-
-    let config: any;
-    try {
-      config = JSON.parse(strippedContent);
-    } catch (error) {
-      throw new Error(
-        `Failed to parse JSON in ${normalizedConfigPath}: ${error}`
-      );
-    }
-
-    // Handle extends
-    let finalConfig = config;
-    const visitedConfigs = new Set<string>([normalizedConfigPath]);
-
-    if (config.extends) {
-      finalConfig = this.resolveExtends(
-        config,
-        normalizedConfigPath,
-        visitedConfigs
-      );
-    }
+    // get-tsconfig already resolves extends for us!
+    const config = result.config;
 
     // Extract compiler options
-    const compilerOptions = finalConfig.compilerOptions || {};
+    const compilerOptions = config.compilerOptions || {};
     const baseUrl = compilerOptions.baseUrl || ".";
     const paths = compilerOptions.paths || {};
 
@@ -175,31 +127,35 @@ export class TsConfigResolver {
     let aliases = this.convertPathsToAliases(
       paths,
       baseUrl,
-      dirname(normalizedConfigPath)
+      dirname(configPath)
     );
 
     // Extract references
-    const references = (finalConfig.references || []).map(
-      (ref: any) => ref.path
+    const referencePaths = (config.references || []).map(
+      (ref: any) => ref.path as string
     );
 
     // If we have references but no aliases, try to collect aliases from referenced configs
     // This is common in Nuxt and other frameworks that use project references
-    if (references.length > 0 && aliases.length === 0) {
+    if (referencePaths.length > 0 && aliases.length === 0) {
       if (this.verbose) {
-        console.log(`  No aliases in main config, checking ${references.length} referenced config(s)`);
+        console.log(`  No aliases in main config, checking ${referencePaths.length} referenced config(s)`);
       }
-      aliases = this.collectAliasesFromReferences(references, normalizedConfigPath);
+      aliases = this.collectAliasesFromReferences(referencePaths, configPath);
     }
 
-    return {
-      configPath: normalizedConfigPath,
+    const info: TsConfigInfo = {
+      configPath,
       baseUrl,
       paths,
       aliases,
-      extends: config.extends,
-      references: references.length > 0 ? references : undefined,
     };
+
+    if (referencePaths.length > 0) {
+      info.references = referencePaths;
+    }
+
+    return info;
   }
 
   /**
@@ -213,12 +169,12 @@ export class TsConfigResolver {
     const seenAliases = new Set<string>();
 
     for (const refPath of references) {
-      const resolvedRefPath = this.resolveConfigPath(
+      const resolvedRefPath = this.resolveReferencePath(
         refPath,
         dirname(baseConfigPath)
       );
 
-      if (!resolvedRefPath) {
+      if (!resolvedRefPath || !existsSync(resolvedRefPath)) {
         if (this.verbose) {
           console.log(`    Referenced config not found: ${refPath}`);
         }
@@ -230,9 +186,16 @@ export class TsConfigResolver {
           console.log(`    Checking referenced config: ${resolvedRefPath}`);
         }
 
-        const refContent = readFileSync(resolvedRefPath, "utf-8");
-        const strippedRefContent = this.stripJsonComments(refContent);
-        const refConfig = JSON.parse(strippedRefContent);
+        // Use parseTsconfig to parse the referenced config
+        // Note: parseTsconfig returns the resolved config directly, not a TsConfigResult
+        const refConfig = parseTsconfig(resolvedRefPath);
+
+        if (!refConfig) {
+          if (this.verbose) {
+            console.log(`      Failed to parse referenced config`);
+          }
+          continue;
+        }
 
         const refCompilerOptions = refConfig.compilerOptions || {};
         const refBaseUrl = refCompilerOptions.baseUrl || ".";
@@ -269,126 +232,22 @@ export class TsConfigResolver {
   }
 
   /**
-   * Resolve extended configuration
+   * Resolve a reference path (handles relative paths)
    */
-  private resolveExtends(
-    config: any,
-    configPath: string,
-    visitedConfigs: Set<string>
-  ): any {
-    const extendsPath = this.resolveConfigPath(
-      config.extends,
-      dirname(configPath)
-    );
-
-    if (!extendsPath) {
-      if (this.verbose) {
-        console.warn(
-          `Warning: Extended config not found: ${config.extends} (from ${configPath})`
-        );
-      }
-      return config;
-    }
-
-    // Check for circular extends
-    if (visitedConfigs.has(extendsPath)) {
-      const cycle = Array.from(visitedConfigs).join(" → ");
-      throw new Error(
-        `Circular extends detected: ${cycle} → ${extendsPath}`
-      );
-    }
-
-    visitedConfigs.add(extendsPath);
-
-    // Parse parent config
-    const parentContent = readFileSync(extendsPath, "utf-8");
-    const strippedParentContent = this.stripJsonComments(parentContent);
-    const parentConfig = JSON.parse(strippedParentContent);
-
-    // Recursively resolve parent's extends
-    let resolvedParentConfig = parentConfig;
-    if (parentConfig.extends) {
-      resolvedParentConfig = this.resolveExtends(
-        parentConfig,
-        extendsPath,
-        visitedConfigs
-      );
-    }
-
-    // Merge configs (child overrides parent)
-    return this.mergeConfigs(resolvedParentConfig, config);
-  }
-
-  /**
-   * Resolve a config path (handles relative and package paths)
-   */
-  private resolveConfigPath(
-    extendsValue: string,
+  private resolveReferencePath(
+    refPath: string,
     fromDir: string
   ): string | null {
-    // Handle relative paths
-    if (extendsValue.startsWith(".")) {
-      const resolvedPath = resolve(fromDir, extendsValue);
-      // Add .json extension if not present
-      const pathWithJson = resolvedPath.endsWith(".json")
-        ? resolvedPath
-        : `${resolvedPath}.json`;
-      return existsSync(pathWithJson)
-        ? normalizePath(pathWithJson)
-        : existsSync(resolvedPath)
-          ? normalizePath(resolvedPath)
-          : null;
+    const resolvedPath = resolve(fromDir, refPath);
+
+    // If path has .json extension, use it directly
+    if (resolvedPath.endsWith(".json")) {
+      return existsSync(resolvedPath) ? normalizePath(resolvedPath) : null;
     }
 
-    // Handle package paths (e.g., "@tsconfig/node18/tsconfig.json")
-    // Try to resolve from node_modules
-    let currentDir = fromDir;
-    const visited = new Set<string>();
-
-    while (currentDir && !visited.has(currentDir)) {
-      visited.add(currentDir);
-      const nodeModulesPath = join(currentDir, "node_modules", extendsValue);
-
-      if (existsSync(nodeModulesPath)) {
-        return normalizePath(nodeModulesPath);
-      }
-
-      const parentDir = resolve(currentDir, "..");
-      if (parentDir === currentDir) break;
-      currentDir = parentDir;
-    }
-
-    return null;
-  }
-
-  /**
-   * Merge two configuration objects (child overrides parent)
-   */
-  private mergeConfigs(parent: any, child: any): any {
-    const merged = { ...parent };
-
-    for (const key in child) {
-      if (key === "extends") continue; // Don't merge extends
-
-      if (
-        key === "compilerOptions" &&
-        typeof child[key] === "object" &&
-        typeof parent[key] === "object"
-      ) {
-        // Deep merge compiler options
-        merged[key] = { ...parent[key], ...child[key] };
-
-        // Special handling for paths - child completely overrides parent
-        if (child[key].paths) {
-          merged[key].paths = child[key].paths;
-        }
-      } else {
-        // Direct override for other properties
-        merged[key] = child[key];
-      }
-    }
-
-    return merged;
+    // Otherwise, assume it's a tsconfig.json
+    const pathWithJson = `${resolvedPath}.json`;
+    return existsSync(pathWithJson) ? normalizePath(pathWithJson) : null;
   }
 
   /**
@@ -424,86 +283,6 @@ export class TsConfigResolver {
   }
 
   /**
-   * Strip JSON comments (both single-line and multi-line)
-   * This is a simple implementation that handles most cases but may not be perfect
-   * for all edge cases. It preserves strings by not removing comment-like patterns
-   * that appear within quoted strings.
-   */
-  private stripJsonComments(json: string): string {
-    let result = "";
-    let inString = false;
-    let inSingleLineComment = false;
-    let inMultiLineComment = false;
-    let stringDelimiter = "";
-
-    for (let i = 0; i < json.length; i++) {
-      const char = json[i];
-      const nextChar = json[i + 1];
-      const prevChar = i > 0 ? json[i - 1] : "";
-
-      // Toggle string state (only if not escaped)
-      if ((char === '"' || char === "'") && prevChar !== "\\") {
-        if (!inSingleLineComment && !inMultiLineComment) {
-          if (!inString) {
-            inString = true;
-            stringDelimiter = char;
-          } else if (char === stringDelimiter) {
-            inString = false;
-            stringDelimiter = "";
-          }
-        }
-      }
-
-      // Start multi-line comment
-      if (
-        !inString &&
-        !inSingleLineComment &&
-        !inMultiLineComment &&
-        char === "/" &&
-        nextChar === "*"
-      ) {
-        inMultiLineComment = true;
-        i++; // Skip the *
-        continue;
-      }
-
-      // End multi-line comment
-      if (inMultiLineComment && char === "*" && nextChar === "/") {
-        inMultiLineComment = false;
-        i++; // Skip the /
-        continue;
-      }
-
-      // Start single-line comment
-      if (
-        !inString &&
-        !inSingleLineComment &&
-        !inMultiLineComment &&
-        char === "/" &&
-        nextChar === "/"
-      ) {
-        inSingleLineComment = true;
-        i++; // Skip the second /
-        continue;
-      }
-
-      // End single-line comment
-      if (inSingleLineComment && (char === "\n" || char === "\r")) {
-        inSingleLineComment = false;
-        result += char; // Preserve the newline
-        continue;
-      }
-
-      // Add character if not in a comment
-      if (!inSingleLineComment && !inMultiLineComment) {
-        result += char;
-      }
-    }
-
-    return result;
-  }
-
-  /**
    * Clear all caches (useful for testing)
    */
   clearCache(): void {
@@ -525,8 +304,12 @@ export class TsConfigResolver {
       const tsconfigPath = join(dir, "tsconfig.json");
       if (existsSync(tsconfigPath)) {
         try {
-          const config = this.parseConfig(tsconfigPath);
-          configs.push(config);
+          // Use getTsconfig for the main config search to get the full result with path
+          const result = getTsconfig(dir, "tsconfig.json");
+          if (result) {
+            const config = this.parseConfig(result);
+            configs.push(config);
+          }
         } catch (error) {
           if (this.verbose) {
             console.warn(`Warning: Failed to parse ${tsconfigPath}: ${error}`);
@@ -537,8 +320,11 @@ export class TsConfigResolver {
       const jsconfigPath = join(dir, "jsconfig.json");
       if (existsSync(jsconfigPath) && !existsSync(tsconfigPath)) {
         try {
-          const config = this.parseConfig(jsconfigPath);
-          configs.push(config);
+          const result = getTsconfig(dir, "jsconfig.json");
+          if (result) {
+            const config = this.parseConfig(result);
+            configs.push(config);
+          }
         } catch (error) {
           if (this.verbose) {
             console.warn(`Warning: Failed to parse ${jsconfigPath}: ${error}`);
