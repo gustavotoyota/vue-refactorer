@@ -21,6 +21,7 @@ Vue Refactorer is a modern CLI tool for moving files and directories in Vue.js, 
    - Respects `.gitignore` files
    - Supports configurable file extensions
    - Uses `globby` for pattern matching
+   - Supports workspace mode to search entire repository
 
 3. **Import Parser** (`src/import-parser.ts`)
 
@@ -94,6 +95,26 @@ Vue Refactorer is a modern CLI tool for moving files and directories in Vue.js, 
 - Directory moves (with content merging)
 - Glob pattern moves (`src/*.vue`, `components/**/*.ts`)
 - Directory content moves (`src/components/*`)
+- Workspace mode: Search entire repository for imports (useful for monorepos)
+
+### Workspace Mode
+
+When using the `-w` or `--workspace` flag, the tool searches for imports across the entire repository instead of just the project root. The repository is determined by:
+
+1. **First priority**: First ancestor directory containing a `.git` folder
+2. **Fallback**: Last ancestor directory containing a `package.json` file
+
+This is particularly useful in monorepo setups where you want to update imports across multiple packages when moving files within a specific package.
+
+**Example**:
+
+```bash
+# Search only in the current project (default)
+vue-refactorer move src/utils/helper.ts src/shared/helper.ts
+
+# Search entire repository (workspace mode)
+vue-refactorer move src/utils/helper.ts src/shared/helper.ts -w
+```
 
 ## Configuration
 
@@ -114,6 +135,7 @@ Path aliases are automatically detected from your project's `tsconfig.json` or `
 - `--no-gitignore`: Disable .gitignore respect
 - `--dry-run` / `-d`: Preview changes without executing
 - `--verbose` / `-v`: Detailed logging output
+- `--workspace` / `-w`: Search for imports in the whole repository (git root or last package.json ancestor)
 
 #### Scan Command
 
@@ -121,6 +143,7 @@ Path aliases are automatically detected from your project's `tsconfig.json` or `
 - `--extensions <extensions>` / `-e <extensions>`: File extensions to process (comma-separated)
 - `--no-gitignore`: Disable .gitignore respect
 - `--verbose` / `-v`: Detailed logging output
+- `--workspace` / `-w`: Search for imports in the whole repository (git root or last package.json ancestor)
 
 ## Development Workflow
 

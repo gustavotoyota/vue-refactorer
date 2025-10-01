@@ -72,6 +72,64 @@ function detectProjectRoot(providedRoot?: string): string {
   return getActualWorkingDirectory();
 }
 
+/**
+ * Find the repository root for workspace mode
+ * Priority:
+ * 1. First ancestor containing .git folder
+ * 2. Last ancestor containing package.json
+ */
+function findRepositoryRoot(startDir: string, verbose: boolean = false): string {
+  let currentDir = startDir;
+  const visited = new Set<string>();
+  let gitRoot: string | undefined;
+  let lastPackageJsonDir: string | undefined;
+
+  if (verbose) {
+    console.log(`Finding repository root starting from: ${currentDir}`);
+  }
+
+  while (currentDir && !visited.has(currentDir)) {
+    visited.add(currentDir);
+
+    // Check for .git directory
+    if (existsSync(join(currentDir, ".git"))) {
+      gitRoot = currentDir;
+      if (verbose) {
+        console.log(`  Found .git directory at: ${gitRoot}`);
+      }
+      // Git root takes priority, return immediately
+      return gitRoot;
+    }
+
+    // Track last package.json found
+    if (existsSync(join(currentDir, "package.json"))) {
+      lastPackageJsonDir = currentDir;
+      if (verbose) {
+        console.log(`  Found package.json at: ${lastPackageJsonDir}`);
+      }
+    }
+
+    // Move to parent directory
+    const parentDir = resolve(currentDir, "..");
+    if (parentDir === currentDir) break; // Reached filesystem root
+    currentDir = parentDir;
+  }
+
+  // If no .git found, use the last package.json directory
+  if (lastPackageJsonDir) {
+    if (verbose) {
+      console.log(`  Using last package.json directory as repository root: ${lastPackageJsonDir}`);
+    }
+    return lastPackageJsonDir;
+  }
+
+  // Fallback to start directory
+  if (verbose) {
+    console.log(`  No .git or package.json found, using start directory: ${startDir}`);
+  }
+  return startDir;
+}
+
 const DEFAULT_EXTENSIONS = [".vue", ".ts", ".tsx", ".js"];
 
 program
@@ -103,6 +161,10 @@ program
     "Show what would be moved without actually moving files"
   )
   .option("-v, --verbose", "Enable verbose output")
+  .option(
+    "-w, --workspace",
+    "Search for imports in the whole repository (git root or last package.json ancestor)"
+  )
   .action(async (sources: string[], options, command) => {
     try {
       const rootDir = detectProjectRoot(options.root);
@@ -122,6 +184,12 @@ program
       const destination = sources[sources.length - 1]!; // Safe because we validated length >= 2
       const sourcePaths = sources.slice(0, -1);
 
+      // Determine workspace root if workspace mode is enabled
+      const workspaceEnabled = options.workspace === true;
+      const workspaceRoot = workspaceEnabled
+        ? findRepositoryRoot(rootDir, options.verbose || false)
+        : undefined;
+
       if (options.verbose) {
         console.log("Debug - Raw CLI arguments:");
         console.log("  Source arguments:", sourcePaths);
@@ -132,6 +200,10 @@ program
         console.log("  INIT_CWD:", process.env.INIT_CWD || "(not set)");
         console.log("  Options root:", options.root);
         console.log("  Detected project root:", normalizePath(rootDir));
+        if (workspaceEnabled && workspaceRoot) {
+          console.log("  Workspace mode enabled");
+          console.log("  Repository root:", normalizePath(workspaceRoot));
+        }
       }
 
       // Resolve paths relative to actual working directory, not project root
@@ -143,6 +215,8 @@ program
         respectGitignore: options.gitignore !== false,
         dryRun: options.dryRun || false,
         verbose: options.verbose || false,
+        workspace: workspaceEnabled,
+        workspaceRoot,
       };
 
       if (config.verbose) {
@@ -150,6 +224,10 @@ program
         console.log("  Project root (for configs):", normalizePath(config.rootDir));
         console.log("  Current working directory:", normalizePath(process.cwd()));
         console.log("  Actual working directory:", normalizePath(getActualWorkingDirectory()));
+        if (config.workspace && config.workspaceRoot) {
+          console.log("  Workspace mode: enabled");
+          console.log("  Repository root (search scope):", normalizePath(config.workspaceRoot));
+        }
         console.log("  Sources:", sourcePaths);
         console.log("  Destination:", normalizePath(destinationPath));
         console.log("  Extensions:", config.fileExtensions);
@@ -219,9 +297,19 @@ program
   )
   .option("--no-gitignore", "Do not respect .gitignore files")
   .option("-v, --verbose", "Enable verbose output")
+  .option(
+    "-w, --workspace",
+    "Search for imports in the whole repository (git root or last package.json ancestor)"
+  )
   .action(async (options) => {
     try {
       const rootDir = detectProjectRoot(options.root);
+
+      // Determine workspace root if workspace mode is enabled
+      const workspaceEnabled = options.workspace === true;
+      const workspaceRoot = workspaceEnabled
+        ? findRepositoryRoot(rootDir, options.verbose || false)
+        : undefined;
 
       const config: CliConfig = {
         rootDir,
@@ -229,6 +317,8 @@ program
         respectGitignore: options.gitignore !== false,
         dryRun: true, // Always dry run for scan
         verbose: options.file ? true : (options.verbose || false), // Always verbose when scanning single file
+        workspace: workspaceEnabled,
+        workspaceRoot,
       };
 
       // Initialize TsConfigResolver

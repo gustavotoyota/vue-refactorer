@@ -53,6 +53,10 @@ export interface CliConfig {
   dryRun: boolean;
   /** Verbose output */
   verbose: boolean;
+  /** Search in whole repository (workspace mode) */
+  workspace: boolean;
+  /** Repository root (only used when workspace is true) */
+  workspaceRoot: string | undefined;
 }
 
 export interface UpdateResult {

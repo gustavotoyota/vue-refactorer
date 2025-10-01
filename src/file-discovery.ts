@@ -70,13 +70,23 @@ export class FileDiscovery {
 
     const patterns = this.config.fileExtensions.map((ext) => `**/*${ext}`);
 
+    // Use workspace root if workspace mode is enabled, otherwise use project root
+    const searchRoot = this.config.workspace && this.config.workspaceRoot
+      ? this.config.workspaceRoot
+      : this.config.rootDir;
+
     if (this.config.verbose) {
       console.log(`Searching for files with patterns: ${patterns.join(", ")}`);
-      console.log(`Root directory: ${this.config.rootDir}`);
+      if (this.config.workspace && this.config.workspaceRoot) {
+        console.log(`Search directory (workspace mode): ${searchRoot}`);
+        console.log(`Project root (for configs): ${this.config.rootDir}`);
+      } else {
+        console.log(`Root directory: ${this.config.rootDir}`);
+      }
     }
 
     const filePaths = await globby(patterns, {
-      cwd: this.config.rootDir,
+      cwd: searchRoot,
       absolute: true,
       gitignore: this.config.respectGitignore,
     });
@@ -84,11 +94,11 @@ export class FileDiscovery {
     // Additional filtering with our custom ignore if needed
     const filteredPaths = this.ignoreFilter
       ? filePaths.filter((path) => {
-          const relativePath = normalizePath(
-            relative(this.config.rootDir, path)
-          );
-          return !this.ignoreFilter!.ignores(relativePath);
-        })
+        const relativePath = normalizePath(
+          relative(searchRoot, path)
+        );
+        return !this.ignoreFilter!.ignores(relativePath);
+      })
       : filePaths;
 
     if (this.config.verbose) {
@@ -98,7 +108,7 @@ export class FileDiscovery {
     const fileInfoPromises = filteredPaths.map(
       async (absolutePath): Promise<FileInfo> => {
         const relativePath = normalizePath(
-          relative(this.config.rootDir, absolutePath)
+          relative(searchRoot, absolutePath)
         );
         const extension = extname(absolutePath);
 

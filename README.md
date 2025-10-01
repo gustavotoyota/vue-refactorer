@@ -84,6 +84,12 @@ Path aliases (like `@` or `~`) are automatically detected from your `tsconfig.js
   npx vue-refactorer move src/components src/shared --dry-run
   ```
 
+- **Search the entire repository** (useful for monorepos):
+
+  ```bash
+  npx vue-refactorer move src/utils/helper.ts src/shared/helper.ts -w
+  ```
+
 ---
 
 ## Common Options
@@ -97,6 +103,7 @@ You can add these flags to the `move` command.
 | `--extensions <ext>` | `-e`  | File extensions to process, comma-separated (default: `.vue,.ts,.tsx,.js`). |
 | `--no-gitignore`     |       | Do not respect `.gitignore` files when scanning.                            |
 | `--verbose`          | `-v`  | Enable detailed logging output for debugging.                               |
+| `--workspace`        | `-w`  | Search entire repository for imports (git root or last package.json).       |
 
 **Note:** Path aliases are automatically detected from your `tsconfig.json` or `jsconfig.json` files.
 
@@ -116,7 +123,7 @@ This is useful for:
 - Verifying that imports are being detected correctly
 - Debugging import resolution issues
 
-The scan command supports the same options as the move command (`--root`, `--extensions`, `--no-gitignore`, `--verbose`).
+The scan command supports the same options as the move command (`--root`, `--extensions`, `--no-gitignore`, `--verbose`, `--workspace`).
 
 ---
 
