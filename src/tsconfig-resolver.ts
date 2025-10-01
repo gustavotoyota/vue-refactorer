@@ -333,12 +333,81 @@ export class TsConfigResolver {
 
   /**
    * Strip JSON comments (both single-line and multi-line)
+   * This is a simple implementation that handles most cases but may not be perfect
+   * for all edge cases. It preserves strings by not removing comment-like patterns
+   * that appear within quoted strings.
    */
   private stripJsonComments(json: string): string {
-    // Remove multi-line comments
-    let result = json.replace(/\/\*[\s\S]*?\*\//g, "");
-    // Remove single-line comments
-    result = result.replace(/\/\/.*/g, "");
+    let result = "";
+    let inString = false;
+    let inSingleLineComment = false;
+    let inMultiLineComment = false;
+    let stringDelimiter = "";
+
+    for (let i = 0; i < json.length; i++) {
+      const char = json[i];
+      const nextChar = json[i + 1];
+      const prevChar = i > 0 ? json[i - 1] : "";
+
+      // Toggle string state (only if not escaped)
+      if ((char === '"' || char === "'") && prevChar !== "\\") {
+        if (!inSingleLineComment && !inMultiLineComment) {
+          if (!inString) {
+            inString = true;
+            stringDelimiter = char;
+          } else if (char === stringDelimiter) {
+            inString = false;
+            stringDelimiter = "";
+          }
+        }
+      }
+
+      // Start multi-line comment
+      if (
+        !inString &&
+        !inSingleLineComment &&
+        !inMultiLineComment &&
+        char === "/" &&
+        nextChar === "*"
+      ) {
+        inMultiLineComment = true;
+        i++; // Skip the *
+        continue;
+      }
+
+      // End multi-line comment
+      if (inMultiLineComment && char === "*" && nextChar === "/") {
+        inMultiLineComment = false;
+        i++; // Skip the /
+        continue;
+      }
+
+      // Start single-line comment
+      if (
+        !inString &&
+        !inSingleLineComment &&
+        !inMultiLineComment &&
+        char === "/" &&
+        nextChar === "/"
+      ) {
+        inSingleLineComment = true;
+        i++; // Skip the second /
+        continue;
+      }
+
+      // End single-line comment
+      if (inSingleLineComment && (char === "\n" || char === "\r")) {
+        inSingleLineComment = false;
+        result += char; // Preserve the newline
+        continue;
+      }
+
+      // Add character if not in a comment
+      if (!inSingleLineComment && !inMultiLineComment) {
+        result += char;
+      }
+    }
+
     return result;
   }
 
