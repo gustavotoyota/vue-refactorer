@@ -119,10 +119,11 @@ program
         console.log("  Process argv:", process.argv);
         console.log("  Process cwd:", normalizePath(process.cwd()));
         console.log("  Options root:", options.root);
-        console.log("  Resolved rootDir:", normalizePath(rootDir));
+        console.log("  Detected project root:", normalizePath(rootDir));
       }
 
-      const destinationPath = resolve(rootDir, destination);
+      // Resolve paths relative to current working directory, not project root
+      const destinationPath = resolve(process.cwd(), destination);
 
       const config: CliConfig = {
         rootDir,
@@ -134,7 +135,8 @@ program
 
       if (config.verbose) {
         console.log("Configuration:");
-        console.log("  Root directory:", normalizePath(config.rootDir));
+        console.log("  Project root (for configs):", normalizePath(config.rootDir));
+        console.log("  Current working directory:", normalizePath(process.cwd()));
         console.log("  Sources:", sourcePaths);
         console.log("  Destination:", normalizePath(destinationPath));
         console.log("  Extensions:", config.fileExtensions);
@@ -153,9 +155,10 @@ program
         // Check if source contains glob patterns
         const hasGlobPattern = containsGlobPattern(source);
 
+        // Resolve paths relative to current working directory, not project root
         const sourcePath = hasGlobPattern
-          ? source // Keep as relative pattern
-          : resolve(rootDir, source);
+          ? source // Keep as relative pattern for globby
+          : resolve(process.cwd(), source);
 
         if (config.verbose) {
           console.log(
@@ -163,8 +166,9 @@ program
               sourcePath
             )} (glob pattern: ${hasGlobPattern})`
           );
-          console.log(`  Original source: ${source}`);
-          console.log(`  Root directory: ${normalizePath(rootDir)}`);
+          console.log(`  Original source argument: ${source}`);
+          console.log(`  Current working directory: ${normalizePath(process.cwd())}`);
+          console.log(`  Project root (for configs): ${normalizePath(rootDir)}`);
           console.log(`  Resolved source path: ${normalizePath(sourcePath)}`);
         }
 

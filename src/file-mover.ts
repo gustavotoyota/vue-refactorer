@@ -446,13 +446,15 @@ export class FileMover {
         `${this.config.dryRun ? "Would resolve" : "Resolving"} glob pattern:`
       );
       console.log(`  Pattern: ${globPattern}`);
-      console.log(`  Root: ${this.config.rootDir}`);
+      console.log(`  Working directory: ${process.cwd()}`);
+      console.log(`  Project root (for configs): ${this.config.rootDir}`);
       console.log(`  Destination: ${destinationPath}`);
     }
 
     // Resolve glob pattern to actual file paths
+    // Use process.cwd() since glob patterns are relative to where the command was run
     const matchedFiles = await globby([globPattern], {
-      cwd: this.config.rootDir,
+      cwd: process.cwd(),
       absolute: true,
       onlyFiles: false, // Include directories too
       gitignore: this.config.respectGitignore,
@@ -462,7 +464,7 @@ export class FileMover {
       console.log(`  Globby found ${matchedFiles.length} matches:`);
       matchedFiles.forEach((file) => {
         console.log(
-          `    ${normalizePath(relative(this.config.rootDir, file))}`
+          `    ${normalizePath(relative(process.cwd(), file))}`
         );
       });
     }
