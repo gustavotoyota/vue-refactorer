@@ -199,6 +199,10 @@ program
       value.split(",").map((ext) => (ext.startsWith(".") ? ext : "." + ext)),
     DEFAULT_EXTENSIONS
   )
+  .option(
+    "-f, --file <path>",
+    "Scan a specific file only (relative to current directory or absolute)"
+  )
   .option("--no-gitignore", "Do not respect .gitignore files")
   .option("-v, --verbose", "Enable verbose output")
   .action(async (options) => {
@@ -216,7 +220,15 @@ program
       // Initialize TsConfigResolver
       const tsConfigResolver = new TsConfigResolver(rootDir, config.verbose);
       const fileMover = new FileMover(config, tsConfigResolver);
-      await fileMover.scan();
+
+      if (options.file) {
+        // Scan a specific file
+        const targetFile = resolve(process.cwd(), options.file);
+        await fileMover.scanFile(targetFile);
+      } else {
+        // Scan all files
+        await fileMover.scan();
+      }
     } catch (error) {
       console.error(
         "Error:",

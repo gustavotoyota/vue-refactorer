@@ -1,7 +1,7 @@
 import { existsSync } from "fs";
 import { mkdir, readdir, rename, rmdir, stat, writeFile } from "fs/promises";
 import { globby } from "globby";
-import { basename, dirname, join, relative, resolve } from "path";
+import { basename, dirname, extname, join, relative, resolve } from "path";
 import { FileDiscovery } from "./file-discovery";
 import { ImportParser } from "./import-parser";
 import { PathResolver } from "./path-resolver";
@@ -155,6 +155,62 @@ export class FileMover {
   }
 
   /**
+   * Scan a specific file and show its imports (for debugging)
+   */
+  async scanFile(targetFilePath: string): Promise<void> {
+    if (!existsSync(targetFilePath)) {
+      throw new Error(`File does not exist: ${targetFilePath}`);
+    }
+
+    console.log(`Scanning file: ${targetFilePath}\n`);
+
+    // Read file content
+    const { readFile } = await import("fs/promises");
+    const content = await readFile(targetFilePath, "utf-8");
+
+    const absolutePath = resolve(targetFilePath);
+    const file: FileInfo = {
+      absolutePath,
+      relativePath: normalizePath(relative(this.config.rootDir, absolutePath)),
+      extension: extname(absolutePath),
+      content,
+      imports: [],
+    };
+
+    // Parse imports
+    file.imports = this.importParser.parseImports(file);
+
+    if (file.imports.length === 0) {
+      console.log("No imports found in this file.");
+      return;
+    }
+
+    console.log(`📁 ${file.relativePath}`);
+    console.log(`Found ${file.imports.length} import(s):\n`);
+
+    for (const imp of file.imports) {
+      const resolvedPath = this.pathResolver.resolveImportPath(
+        imp.path,
+        file.absolutePath
+      );
+      const status = resolvedPath && existsSync(resolvedPath) ? "✅" : "❌";
+      console.log(`${status} Line ${imp.line}: ${imp.original.trim()}`);
+      console.log(`   Import path: "${imp.path}"`);
+
+      if (resolvedPath) {
+        console.log(
+          `   Resolves to: ${normalizePath(
+            relative(this.config.rootDir, resolvedPath)
+          )}`
+        );
+      } else {
+        console.log(`   Could not resolve (file not found or invalid path)`);
+      }
+      console.log();
+    }
+  }
+
+  /**
    * Parse imports for all files
    */
   private async parseImportsForFiles(files: FileInfo[]): Promise<FileInfo[]> {
@@ -182,6 +238,9 @@ export class FileMover {
       );
       if (needsUpdate) {
         filesToUpdate.push(file);
+        if (this.config.verbose) {
+          console.log(`  File needs update: ${file.relativePath}`);
+        }
       }
     }
 
