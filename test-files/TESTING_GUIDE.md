@@ -2,19 +2,257 @@
 
 This document provides recommended test commands for the `vue-refactorer` tool using the test file structure in this directory.
 
-**Important**: All commands assume you're running from the `/test-files` directory and have the `vue-refactorer` CLI available (either globally installed or via `npx`).
+**Important**: Most commands assume you're running from the `/test-files` directory, but the [Working Directory Independent Tests](#working-directory-independent-tests) section includes tests that can be run from any directory. All tests require the `vue-refactorer` CLI to be available (either globally installed or via `npx`).
 
 ## Table of Contents
 
-1. [Basic Single File Moves](#basic-single-file-moves)
-2. [Directory Moves](#directory-moves)
-3. [Glob Pattern Moves](#glob-pattern-moves)
-4. [Path Alias Testing](#path-alias-testing)
-5. [Deep Nesting Scenarios](#deep-nesting-scenarios)
-6. [Barrel Export Testing](#barrel-export-testing)
-7. [Complex Refactoring Scenarios](#complex-refactoring-scenarios)
-8. [Edge Cases](#edge-cases)
-9. [Dry Run & Scan Commands](#dry-run--scan-commands)
+1. [Working Directory Independent Tests](#working-directory-independent-tests)
+2. [Basic Single File Moves](#basic-single-file-moves)
+3. [Directory Moves](#directory-moves)
+4. [Glob Pattern Moves](#glob-pattern-moves)
+5. [Path Alias Testing](#path-alias-testing)
+6. [Deep Nesting Scenarios](#deep-nesting-scenarios)
+7. [Barrel Export Testing](#barrel-export-testing)
+8. [Complex Refactoring Scenarios](#complex-refactoring-scenarios)
+9. [Edge Cases](#edge-cases)
+10. [Dry Run & Scan Commands](#dry-run--scan-commands)
+
+---
+
+## Working Directory Independent Tests
+
+**Objective**: Test the tool's ability to auto-detect project root and work from various directories without explicit `--root` flags.
+
+These tests can be run from any directory and use paths that don't start with `src/`. The tool should auto-detect the project root by finding `tsconfig.json`, `package.json`, or `.git` markers.
+
+### Test 33: Run from repository root
+
+**Working Directory**: `` (repository root)
+
+```bash
+# Move a utility file using test-files/ prefix
+vue-refactorer move test-files/src/utils/string-utils.ts test-files/src/helpers/string-utils.ts --dry-run
+
+# Expected behavior:
+# - Auto-detects test-files as the project root (finds test-files/tsconfig.json)
+# - Updates all imports within test-files/src/**
+```
+
+### Test 34: Run from components directory
+
+**Working Directory**: `test-files\src\components\`
+
+```bash
+# Move using relative paths from component directory
+vue-refactorer move common/Button.vue ui/Button.vue --dry-run
+
+# Expected behavior:
+# - Auto-detects project root by walking up to find test-files/tsconfig.json
+# - Updates imports in layout/Header.vue, features/user/UserCard.vue, etc.
+```
+
+### Test 35: Run from deeply nested directory
+
+**Working Directory**: `test-files\src\components\features\user\`
+
+```bash
+# Move a component using relative paths
+vue-refactorer move UserCard.vue ../../../shared/UserCard.vue --dry-run
+
+# Expected behavior:
+# - Auto-detects project root (walks up directory tree)
+# - Calculates correct relative paths for all imports
+# - Updates UserProfile.vue (in same directory), index.ts, etc.
+```
+
+### Test 36: Run from utils directory with parent path
+
+**Working Directory**: `test-files\src\utils\`
+
+```bash
+# Move file to parent directory structure
+vue-refactorer move string-utils.ts ../helpers/string-utils.ts --dry-run
+
+# Expected updates (relative to project root):
+# - src/utils/index.ts
+# - src/services/auth.service.ts
+# - src/composables/useUser.ts
+# - Multiple component files
+```
+
+### Test 37: Run from services directory
+
+**Working Directory**: `test-files\src\services\`
+
+```bash
+# Move auth service to different location
+vue-refactorer move auth.service.ts ../core/auth.service.ts --dry-run
+
+# Expected updates:
+# - src/composables/useAuth.ts
+# - src/main.ts
+```
+
+### Test 38: Run with mixed path styles
+
+**Working Directory**: `test-files\`
+
+```bash
+# Mix relative and project-relative paths
+vue-refactorer move ./src/types/user.ts ./src/models/user.ts --dry-run
+
+# Expected behavior:
+# - Correctly resolves ./src/ relative to current directory
+# - Updates all imports across the project
+```
+
+### Test 39: Run from parent of test-files
+
+**Working Directory**: ``
+
+```bash
+# Move directory using test-files/ prefix
+vue-refactorer move test-files/src/components/common test-files/src/components/ui --dry-run
+
+# Expected behavior:
+# - Auto-detects test-files as the project root
+# - Updates all component imports
+# - Handles barrel exports in common/index.ts
+```
+
+### Test 40: Scan from different directory
+
+**Working Directory**: `test-files\src\`
+
+```bash
+# Scan for dependencies from src directory
+vue-refactorer scan utils/validators.ts
+
+# Expected output:
+# - Shows all files importing validators.ts
+# - Paths relative to project root
+```
+
+### Test 41: Glob pattern from subdirectory
+
+**Working Directory**: `test-files\src\`
+
+```bash
+# Use glob pattern from src directory
+vue-refactorer move "services/*.ts" core/ --dry-run
+
+# Expected behavior:
+# - Resolves glob relative to current directory
+# - Moves all service files to core/
+# - Updates imports in composables and main.ts
+```
+
+### Test 42: Move with absolute-style paths from anywhere
+
+**Working Directory**: Any directory (e.g., `test-files\src\components\features\`)
+
+```bash
+# Use paths relative to current location
+vue-refactorer move ../../types/product.ts ../../models/product.ts --dry-run
+
+# Expected behavior:
+# - Auto-detects project root correctly
+# - Resolves complex relative paths
+# - Updates all type imports
+```
+
+### Test 43: Directory content move from subdirectory
+
+**Working Directory**: `test-files\src\components\`
+
+```bash
+# Move all files in common (not the directory itself)
+vue-refactorer move "common/*" shared/ --dry-run
+
+# Expected behavior:
+# - Moves Button.vue, Input.vue, etc. to shared/
+# - Updates all imports referencing these components
+```
+
+### Test 44: Test root auto-detection near .git
+
+**Working Directory**: `test-files\src\`
+
+```bash
+# Move without specifying root (should find test-files/tsconfig.json)
+vue-refactorer move utils/date-utils.ts helpers/date-utils.ts --dry-run --verbose
+
+# Expected verbose output should show:
+# - Detected project root: .../test-files
+# - Config found: .../test-files/tsconfig.json
+```
+
+### Test 45: Cross-directory complex refactor
+
+**Working Directory**: ``
+
+```bash
+# Multi-step refactoring from repo root
+vue-refactorer move test-files/src/components/features/product test-files/src/modules/products/components --dry-run
+vue-refactorer move test-files/src/services/product.service.ts test-files/src/modules/products/services/product.service.ts --dry-run
+
+# Expected behavior:
+# - Both commands auto-detect same project root
+# - Updates are consistent across both moves
+# - All cross-references are maintained
+```
+
+### Test 46: Rename from parent directory
+
+**Working Directory**: `test-files\`
+
+```bash
+# Simple rename using relative paths
+vue-refactorer move src/utils/string-utils.ts src/utils/text-utils.ts --dry-run
+
+# Expected behavior:
+# - Renames file in place
+# - Updates all imports to use new name
+```
+
+### Test 47: Verify barrel exports from different directory
+
+**Working Directory**: `test-files\src\components\`
+
+```bash
+# Move file that's part of barrel export
+vue-refactorer move common/Button.vue common/ButtonComponent.vue --dry-run
+
+# Expected updates:
+# - common/index.ts (export statement)
+# - All files importing from common/Button.vue or common/index.ts
+```
+
+---
+
+### Working Directory Test Tips
+
+1. **Auto-detection verification**: Use `--verbose` flag to see which project root was detected
+2. **Path resolution**: The tool resolves all paths relative to your current working directory first, then finds the project root
+3. **Consistency**: Running the same move from different directories should produce the same result
+4. **tsconfig.json priority**: The tool prioritizes directories with `tsconfig.json` or `jsconfig.json` as project roots
+5. **Fallback markers**: If no TypeScript config found, it looks for `package.json` or `.git` directory
+
+### Verification Commands
+
+After running moves from different directories:
+
+```bash
+# From any directory, check TypeScript compilation
+cd test-files
+npx tsc --noEmit
+
+# Check git diff to see actual changes
+git diff
+
+# Revert changes to test more scenarios
+git checkout .
+```
 
 ---
 
