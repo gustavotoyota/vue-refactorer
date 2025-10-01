@@ -20,6 +20,16 @@ function containsGlobPattern(path: string): boolean {
 }
 
 /**
+ * Get the actual working directory, accounting for npx behavior
+ * npx changes the working directory to the nearest package.json, but sets INIT_CWD to the original directory
+ */
+function getActualWorkingDirectory(): string {
+  // Use INIT_CWD if available (set by npm/npx to preserve original working directory)
+  // Otherwise fall back to process.cwd()
+  return process.env.INIT_CWD || process.cwd();
+}
+
+/**
  * Detect project root by looking for common markers
  */
 function detectProjectRoot(providedRoot?: string): string {
@@ -27,8 +37,8 @@ function detectProjectRoot(providedRoot?: string): string {
     return resolve(providedRoot);
   }
 
-  // Start from current working directory
-  let currentDir = process.cwd();
+  // Start from actual working directory (accounts for npx behavior)
+  let currentDir = getActualWorkingDirectory();
 
   // Walk up to find project markers
   const visited = new Set<string>();
@@ -58,8 +68,8 @@ function detectProjectRoot(providedRoot?: string): string {
     currentDir = parentDir;
   }
 
-  // Fallback to current directory
-  return process.cwd();
+  // Fallback to actual working directory
+  return getActualWorkingDirectory();
 }
 
 const DEFAULT_EXTENSIONS = [".vue", ".ts", ".tsx", ".js"];
@@ -118,12 +128,14 @@ program
         console.log("  Destination argument:", destination);
         console.log("  Process argv:", process.argv);
         console.log("  Process cwd:", normalizePath(process.cwd()));
+        console.log("  Actual working directory:", normalizePath(getActualWorkingDirectory()));
+        console.log("  INIT_CWD:", process.env.INIT_CWD || "(not set)");
         console.log("  Options root:", options.root);
         console.log("  Detected project root:", normalizePath(rootDir));
       }
 
-      // Resolve paths relative to current working directory, not project root
-      const destinationPath = resolve(process.cwd(), destination);
+      // Resolve paths relative to actual working directory, not project root
+      const destinationPath = resolve(getActualWorkingDirectory(), destination);
 
       const config: CliConfig = {
         rootDir,
@@ -137,6 +149,7 @@ program
         console.log("Configuration:");
         console.log("  Project root (for configs):", normalizePath(config.rootDir));
         console.log("  Current working directory:", normalizePath(process.cwd()));
+        console.log("  Actual working directory:", normalizePath(getActualWorkingDirectory()));
         console.log("  Sources:", sourcePaths);
         console.log("  Destination:", normalizePath(destinationPath));
         console.log("  Extensions:", config.fileExtensions);
@@ -155,10 +168,10 @@ program
         // Check if source contains glob patterns
         const hasGlobPattern = containsGlobPattern(source);
 
-        // Resolve paths relative to current working directory, not project root
+        // Resolve paths relative to actual working directory, not project root
         const sourcePath = hasGlobPattern
           ? source // Keep as relative pattern for globby
-          : resolve(process.cwd(), source);
+          : resolve(getActualWorkingDirectory(), source);
 
         if (config.verbose) {
           console.log(
@@ -168,6 +181,7 @@ program
           );
           console.log(`  Original source argument: ${source}`);
           console.log(`  Current working directory: ${normalizePath(process.cwd())}`);
+          console.log(`  Actual working directory: ${normalizePath(getActualWorkingDirectory())}`);
           console.log(`  Project root (for configs): ${normalizePath(rootDir)}`);
           console.log(`  Resolved source path: ${normalizePath(sourcePath)}`);
         }
@@ -223,7 +237,7 @@ program
 
       if (options.file) {
         // Scan a specific file (always verbose for detailed debugging)
-        const targetFile = resolve(process.cwd(), options.file);
+        const targetFile = resolve(getActualWorkingDirectory(), options.file);
         await fileMover.scanFile(targetFile);
       } else {
         // Scan all files
